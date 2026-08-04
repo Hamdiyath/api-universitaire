@@ -1,16 +1,35 @@
-# This is a sample Python script.
+# ============================================================
+# main.py - Point d'entrée de l'API FastAPI
+# ============================================================
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+# ---------- Gestion du cycle de vie ----------
+# Ici, on ne crée plus les tables automatiquement.
+# Les migrations sont gérées via Alembic.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Code exécuté au démarrage
+    # On peut ajouter une vérification de connexion à la DB ici
+    # (mais pas de création de tables)
+    print("✅ API Universitaire démarrée")
+    yield
+    # Code exécuté à l'arrêt
+    print("👋 API Universitaire arrêtée")
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+
+# ---------- Création de l'application ----------
+app = FastAPI(
+    title="API Universitaire",
+    description="API de gestion de la scolarité",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+
+# ---------- Routes ----------
+@app.get("/")
+def root():
+    return {"message": "API en ligne"}
