@@ -5,22 +5,18 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
+from routes import auth as auth_router
+from routes import filiere as filieres_router  # ← Ajouté
+from core.handlers import setup_exception_handlers
 
-# ---------- Gestion du cycle de vie ----------
-# Ici, on ne crée plus les tables automatiquement.
-# Les migrations sont gérées via Alembic.
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Code exécuté au démarrage
-    # On peut ajouter une vérification de connexion à la DB ici
-    # (mais pas de création de tables)
     print("✅ API Universitaire démarrée")
     yield
-    # Code exécuté à l'arrêt
     print("👋 API Universitaire arrêtée")
 
 
-# ---------- Création de l'application ----------
 app = FastAPI(
     title="API Universitaire",
     description="API de gestion de la scolarité",
@@ -28,8 +24,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Configuration des handlers d'erreurs
+setup_exception_handlers(app)
 
-# ---------- Routes ----------
+# Inclusion des routeurs
+app.include_router(auth_router.router)
+app.include_router(filieres_router.router)
+
+
 @app.get("/")
 def root():
-    return {"message": "API en ligne"}
+    return {
+        "success": True,
+        "message": "Bienvenue sur l'API Universitaire",
+        "data": None,
+    }
