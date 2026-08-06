@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import Optional
 
 
 class MatiereBase(BaseModel):
@@ -11,6 +12,12 @@ class MatiereBase(BaseModel):
 
 class MatiereCreate(MatiereBase):
     pass
+
+class MatiereUpdate(BaseModel):
+    """Données requises pour mettre à jour une matiere (tous les champs sont optionnels)"""
+    nom: Optional[str] = Field(None, min_length=2, max_length=100)
+    description: Optional[str] = Field(None, max_length=255)
+
 
 
 class MatiereRead(MatiereBase):

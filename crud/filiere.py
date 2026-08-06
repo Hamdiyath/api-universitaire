@@ -1,6 +1,5 @@
-# ============================================================
+
 # crud/filiere.py - Opérations CRUD pour la table Filiere
-# ============================================================
 
 from typing import Optional, List
 from sqlalchemy.orm import Session

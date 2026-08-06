@@ -6,6 +6,8 @@ from typing import Callable
 from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
+
 from schemas.response import ApiResponse
 
 
@@ -13,15 +15,6 @@ from schemas.response import ApiResponse
 def handle_request(service_func: Callable, success_message: str = "Opération réussie", *args, **kwargs) -> ApiResponse:
     """
     Exécute une fonction de service et retourne une réponse standardisée.
-
-    Args:
-        service_func (Callable): La fonction de service à exécuter
-        success_message (str): Message de succès personnalisé
-        *args: Arguments positionnels pour la fonction
-        **kwargs: Arguments nommés pour la fonction
-
-    Returns:
-        ApiResponse: Réponse standardisée
     """
     try:
         result = service_func(*args, **kwargs)
@@ -29,6 +22,19 @@ def handle_request(service_func: Callable, success_message: str = "Opération r�
             success=True,
             message=success_message,
             data=result
+        )
+    except IntegrityError as e:
+        # Gestion des erreurs d'intégrité de la base de données
+        if "UNIQUE constraint" in str(e):
+            return ApiResponse(
+                success=False,
+                message="Cette valeur est déjà utilisée (contrainte d'unicité)",
+                data=None
+            )
+        return ApiResponse(
+            success=False,
+            message=f"Erreur d'intégrité de la base de données: {str(e)}",
+            data=None
         )
     except HTTPException as e:
         return ApiResponse(

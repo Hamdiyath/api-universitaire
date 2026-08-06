@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from routes import auth as auth_router
+from routes import matiere as matiere_router
 from routes import filiere as filieres_router  # ← Ajouté
 from core.handlers import setup_exception_handlers
 
@@ -30,6 +31,7 @@ setup_exception_handlers(app)
 # Inclusion des routeurs
 app.include_router(auth_router.router)
 app.include_router(filieres_router.router)
+app.include_router(matiere_router.router)
 
 
 @app.get("/")
