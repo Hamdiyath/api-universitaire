@@ -1,80 +1,129 @@
-
-# services/user_service.py - Logique métier pour User
+# ============================================================
+# services/user_service.py - Logique métier pour la gestion des utilisateurs (hors auth)
+# ============================================================
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+from typing import List
+import secrets
+from datetime import datetime, timedelta
 
-from crud.user import get_by_email, create
-from core.security import hash_password, verify_password
-from schemas.user import UserCreate
+from crud.user import get_all, get_by_id, update, delete, get_by_email, create
+from crud.role import get_by_name
+from schemas.user import UserUpdate, UserRead, UserUpdateSelf, UserCreate
 
 
-def register_user(db: Session, user_data: UserCreate):
+# ---------- Créer un utilisateur (Admin/Scolarité) ----------
+def create_user_account(db: Session, user_data: UserCreate):
     """
-    Logique d'inscription d'un nouvel utilisateur.
-
-    Étapes :
-        1. Vérifier que l'email n'est pas déjà utilisé
-        2. Vérifier que les mots de passe correspondent
-        3. Hacher le mot de passe
-        4. Créer l'utilisateur en base
-        5. Retourner l'utilisateur créé
+    Crée un compte utilisateur (Admin/Scolarité).
+    - Vérifie que l'email n'existe pas déjà
+    - Vérifie que le rôle existe
+    - Génère un token d'activation
+    - Crée l'utilisateur avec is_active=False
+    - Associe le rôle
     """
     # 1. Vérifier si l'email existe déjà
     existing_user = get_by_email(db, user_data.email)
     if existing_user:
-       raise HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cet email est déjà utilisé"
         )
 
-    # 2. Vérifier que les mots de passe correspondent
-    if user_data.password != user_data.password_confirm:
+    # 2. Vérifier que le rôle existe
+    role_obj = get_by_name(db, user_data.role_name)
+    if not role_obj:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Les mots de passe ne correspondent pas"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Le rôle '{user_data.role_name}' n'existe pas"
         )
 
-    # 3. Hacher le mot de passe
-    hashed_password = hash_password(user_data.password)
+    # 3. Générer le token d'activation
+    activation_token = secrets.token_urlsafe(32)
+    activation_token_expires = datetime.utcnow() + timedelta(hours=24)
 
-    # 4. Préparer les données pour la création
+    # 4. Préparer les données
     user_dict = user_data.model_dump()
-    user_dict.pop("password")
-    user_dict.pop("password_confirm")
-    user_dict["password_hash"] = hashed_password
+    user_dict.pop("role_name")
+    user_dict["password_hash"] = None
+    user_dict["is_active"] = False
+    user_dict["activation_token"] = activation_token
+    user_dict["activation_token_expires"] = activation_token_expires
 
     # 5. Créer l'utilisateur
     new_user = create(db, user_dict)
 
+    # 6. Associer le rôle
+    new_user.roles.append(role_obj)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
     return new_user
 
 
-def authenticate_user(db: Session, email: str, password: str):
-    """
-    Logique de connexion d'un utilisateur.
+# ---------- Récupérer tous les utilisateurs ----------
+def get_all_users(db: Session, skip: int = 0, limit: int = 100) -> List[UserRead]:
+    users = get_all(db, skip, limit)
+    return [UserRead.model_validate(user) for user in users]
 
-    Étapes :
-        1. Récupérer l'utilisateur par son email
-        2. Vérifier que l'utilisateur existe
-        3. Vérifier que le mot de passe correspond
-        4. Retourner l'utilisateur
-    """
-    # 1. Récupérer l'utilisateur
-    user = get_by_email(db, email)
 
-    # 2. Vérifier que l'utilisateur existe
+# ---------- Récupérer un utilisateur par son ID ----------
+def get_user_by_id(db: Session, user_id: int) -> dict:
+    user = get_by_id(db, user_id)
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email ou mot de passe incorrect"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utilisateur non trouvé"
         )
+    return UserRead.model_validate(user).model_dump()
 
-    # 3. Vérifier le mot de passe
-    if not verify_password(password, user.password_hash):
+
+# ---------- Mettre à jour un utilisateur (Admin/Scolarité) ----------
+def update_user(db: Session, user_id: int, user_data: UserUpdate) -> UserRead:
+    user = get_by_id(db, user_id)
+    if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email ou mot de passe incorrect"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utilisateur non trouvé"
         )
 
-    return user
+    update_data = user_data.model_dump(exclude_unset=True)
+
+    if "email" in update_data:
+        existing = get_by_email(db, update_data["email"])
+        if existing and existing.id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cet email est déjà utilisé par un autre compte"
+            )
+
+    updated_user = update(db, user_id, update_data)
+    return UserRead.model_validate(updated_user)
+
+
+# ---------- Mettre à jour son propre profil (Utilisateur connecté) ----------
+def update_user_self(db: Session, user_id: int, user_data: UserUpdateSelf) -> UserRead:
+    user = get_by_id(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utilisateur non trouvé"
+        )
+
+    update_data = user_data.model_dump(exclude_unset=True)
+    updated_user = update(db, user_id, update_data)
+    return UserRead.model_validate(updated_user)
+
+
+# ---------- Supprimer un utilisateur ----------
+def delete_user(db: Session, user_id: int):
+    user = get_by_id(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utilisateur non trouvé"
+        )
+    delete(db, user_id)
+    return None

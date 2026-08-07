@@ -1,12 +1,16 @@
+
 # routes/auth.py - Routes d'authentification
 
-from fastapi import APIRouter, Depends, status
+
+from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from schemas.user import UserCreate, UserRead, UserLogin
-from services.user_service import register_user, authenticate_user
+from schemas.user import UserLogin, UserActivate
+from services.auth_service import authenticate_user, activate_user_account
 from core.security import create_access_token
+from core.handlers import handle_request
+from schemas.response import ApiResponse
 
 router = APIRouter(
     prefix="/auth",
@@ -14,37 +18,11 @@ router = APIRouter(
 )
 
 
-# ---------- Endpoint d'inscription ----------
-@router.post("/register", status_code=status.HTTP_201_CREATED)
-def register(
-        user_data: UserCreate,
-        db: Session = Depends(get_db)
-):
-    """
-    Inscription d'un nouvel utilisateur.
-
-    - Vérifie que l'email n'est pas déjà utilisé
-    - Vérifie que les mots de passe correspondent
-    - Crée l'utilisateur en base
-    - Retourne l'utilisateur filtré (sans hash de mot de passe)
-    """
-    new_user = register_user(db, user_data)
-
-    # On passe new_user dans UserRead pour filtrer le password_hash
-    user_schema = UserRead.model_validate(new_user)
-
-    return {
-        "success": True,
-        "message": "Utilisateur créé avec succès",
-        "data": user_schema
-    }
-
-
-# ---------- Endpoint de connexion ----------
-@router.post("/login")
+# ---------- Connexion ----------
+@router.post("/login", response_model=ApiResponse)
 def login(
-        user_data: UserLogin,
-        db: Session = Depends(get_db)
+    user_data: UserLogin,
+    db: Session = Depends(get_db)
 ):
     """
     Connexion d'un utilisateur.
@@ -61,5 +39,71 @@ def login(
         "data": {
             "access_token": access_token,
             "token_type": "bearer"
+        }
+    }
+
+
+# ---------- Vérification du token d'activation ----------
+@router.get("/activate/{token}", response_model=ApiResponse)
+def verify_activation_token(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Vérifie si le token d'activation est valide.
+    """
+    from crud.user import get_by_activation_token
+    from datetime import datetime
+
+    user = get_by_activation_token(db, token)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Token d'activation invalide"
+        )
+
+    if user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ce compte est déjà activé"
+        )
+
+    if user.activation_token_expires and user.activation_token_expires < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le token d'activation a expiré"
+        )
+
+    return {
+        "success": True,
+        "message": "Token valide. Veuillez définir votre mot de passe.",
+        "data": {
+            "email": user.email,
+            "nom": user.nom,
+            "prenom": user.prenom
+        }
+    }
+
+
+# ---------- Activation du compte (définition du mot de passe) ----------
+@router.post("/activate/{token}", response_model=ApiResponse)
+def activate_user(
+    token: str,
+    password_data: UserActivate,
+    db: Session = Depends(get_db)
+):
+    """
+    Active le compte en définissant le mot de passe.
+    """
+    user = activate_user_account(db, token, password_data)
+
+    return {
+        "success": True,
+        "message": "Compte activé avec succès. Vous pouvez maintenant vous connecter.",
+        "data": {
+            "email": user.email,
+            "nom": user.nom,
+            "prenom": user.prenom
         }
     }

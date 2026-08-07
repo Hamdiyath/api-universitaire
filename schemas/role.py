@@ -15,6 +15,13 @@ class RoleCreate(RoleBase):
     pass
 
 
+class RoleUpdate(BaseModel):
+    """Données requises pour mettre à jour un role  (tous les champs sont optionnels)"""
+    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    description: Optional[str] = Field(None, max_length=255)
+
+
+
 # ---------- Schéma pour la LECTURE ----------
 class RoleRead(RoleBase):
     """Données retournées par l'API"""

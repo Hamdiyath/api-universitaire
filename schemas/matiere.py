@@ -13,11 +13,14 @@ class MatiereBase(BaseModel):
 class MatiereCreate(MatiereBase):
     pass
 
+
 class MatiereUpdate(BaseModel):
     """Données requises pour mettre à jour une matiere (tous les champs sont optionnels)"""
+    code: Optional[str] = Field(None, min_length=3, max_length=20)
     nom: Optional[str] = Field(None, min_length=2, max_length=100)
-    description: Optional[str] = Field(None, max_length=255)
-
+    credits: Optional[int] = Field(None, gt=0)
+    semestre: Optional[str] = Field(None, min_length=2, max_length=20)
+    niveau: Optional[str] = Field(None, min_length=2, max_length=20)
 
 
 class MatiereRead(MatiereBase):

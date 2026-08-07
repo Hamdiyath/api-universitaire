@@ -1,6 +1,6 @@
-# ============================================================
+
 # crud/matiere.py - Opérations CRUD pour la table Matiere
-# ============================================================
+
 
 from typing import Optional, List
 from sqlalchemy.orm import Session

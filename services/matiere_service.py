@@ -1,6 +1,6 @@
-# ============================================================
+
 # services/matiere_service.py - Logique métier pour Matiere
-# ============================================================
+
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status

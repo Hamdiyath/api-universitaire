@@ -1,8 +1,8 @@
-"""Création des 7 tables
+"""Initialisation complète
 
-Revision ID: e8cf549aac76
+Revision ID: 60dfef0c94ad
 Revises: 
-Create Date: 2026-08-05 13:22:25.384869
+Create Date: 2026-08-07 12:33:56.304957
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'e8cf549aac76'
+revision: str = '60dfef0c94ad'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -54,17 +54,23 @@ def upgrade() -> None:
     op.create_table('users',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('email', sa.String(length=255), nullable=False),
-    sa.Column('password_hash', sa.String(length=255), nullable=False),
+    sa.Column('password_hash', sa.String(length=255), nullable=True),
     sa.Column('nom', sa.String(length=100), nullable=False),
     sa.Column('prenom', sa.String(length=100), nullable=False),
     sa.Column('date_naissance', sa.Date(), nullable=True),
     sa.Column('telephone', sa.String(length=20), nullable=True),
+    sa.Column('adresse', sa.String(length=255), nullable=True),
+    sa.Column('photo', sa.String(length=255), nullable=True),
     sa.Column('matricule', sa.String(length=50), nullable=True),
     sa.Column('specialite', sa.String(length=255), nullable=True),
     sa.Column('statut', sa.String(length=20), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('activation_token', sa.String(length=255), nullable=True),
+    sa.Column('activation_token_expires', sa.DateTime(), nullable=True),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('activation_token'),
     sa.UniqueConstraint('matricule')
     )
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
