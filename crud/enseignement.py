@@ -73,3 +73,10 @@ def delete(db: Session, professeur_id: int, matiere_id: int, semestre: str) -> N
         db.delete(enseignement)
         db.commit()
     return None
+
+# ---------- Récupération d'un enseignement par ID ----------
+def get_by_id(db: Session, enseignement_id: int) -> Optional[Enseignement]:
+    """
+    Récupère un enseignement par son ID.
+    """
+    return db.query(Enseignement).filter(Enseignement.id == enseignement_id).first()

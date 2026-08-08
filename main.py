@@ -4,7 +4,7 @@
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-
+from routes import enseignement as enseignements_router
 from scripts.seed_admin import seed_admin
 from routes.user import router as user_router
 from routes import auth as auth_router
@@ -41,7 +41,7 @@ app.include_router(role_router.router)
 app.include_router(user_router)
 app.include_router(notes_router.router)          # ← AJOUTER
 app.include_router(bulletins_router.router)      # ← AJOUTER
-
+app.include_router(enseignements_router.router)
 
 @app.get("/")
 def root():

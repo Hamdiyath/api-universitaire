@@ -1,22 +1,37 @@
+# ============================================================
 # routes/users.py - Routes pour la gestion des utilisateurs
+# ============================================================
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
-from services.user_service import create_user_account
+from typing import List, Union
+
 from database import get_db
 from models.user import User
-from schemas.user import UserRead, UserUpdate, UserUpdateSelf ,UserCreate
-from services.user_service import get_all_users, get_user_by_id, update_user, delete_user, update_user_self
+from schemas.user import (
+    UserRead,
+    UserReadAdmin,
+    UserUpdate,
+    UserUpdateSelf,
+    UserCreate
+)
+from services.user_service import (
+    create_user_account,
+    get_all_users,
+    get_user_by_id,
+    update_user,
+    delete_user,
+    update_user_self
+)
 from core.dependencies import get_current_user, require_role
 from core.handlers import handle_request
 from schemas.response import ApiResponse
 
-# ---------- Configuration du routeur ----------
 router = APIRouter(prefix="/users", tags=["Utilisateurs"])
 
 
 # ============================================
-# ROUTES "FIXES" (sans paramètre variable)
+# ROUTES FIXES (sans paramètre variable)
 # ============================================
 
 # ---------- 1. Récupérer son propre profil ----------
@@ -48,19 +63,36 @@ def update_self(
 # ============================================
 
 # ---------- 3. Récupérer un utilisateur par ID ----------
-@router.get("/{user_id}", response_model=ApiResponse[UserRead])
+@router.get("/{user_id}", response_model=ApiResponse)
 def read_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     user_roles = [role.name for role in current_user.roles]
+
     if current_user.id != user_id and "admin" not in user_roles and "scolarite" not in user_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Vous n'avez pas l'autorisation de voir ce profil"
         )
-    return handle_request(get_user_by_id, "Utilisateur récupéré", db, user_id)
+
+    user_data = get_user_by_id(db, user_id)
+
+    # Si l'utilisateur est admin, retourner avec token
+    if "admin" in user_roles:
+        return ApiResponse(
+            success=True,
+            message="Utilisateur récupéré",
+            data=user_data
+        )
+    else:
+        # Sinon, retourner sans token
+        return ApiResponse(
+            success=True,
+            message="Utilisateur récupéré",
+            data=UserRead.model_validate(user_data)
+        )
 
 
 # ---------- 4. Modifier un utilisateur (Admin/Scolarité) ----------
@@ -106,7 +138,7 @@ def read_all_users(
 
 
 # ---------- 7. Créer un utilisateur ----------
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=ApiResponse[UserRead])
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=ApiResponse[UserReadAdmin])
 def create_user(
     user_data: UserCreate,
     db: Session = Depends(get_db),

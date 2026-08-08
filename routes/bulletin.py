@@ -4,7 +4,6 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
 
 from database import get_db
 from models.user import User
@@ -12,7 +11,10 @@ from schemas.resultat_semestre import ResultatSemestreRead
 from services.bulletin_service import (
     generer_bulletin_etudiant,
     sauvegarder_resultat_semestre,
-    calculer_moyenne_semestre
+    calculer_moyenne_semestre,
+    calculer_moyenne_matiere_etudiant
+
+
 )
 from core.dependencies import get_current_user, require_role
 from core.handlers import handle_request
@@ -144,4 +146,31 @@ def get_calcul_semestre(
         etudiant_id,
         semestre,
         annee_universitaire
+    )
+
+
+@router.get("/matiere/{matiere_id}/etudiant/{etudiant_id}", response_model=ApiResponse)
+def get_moyenne_matiere_etudiant(
+    matiere_id: int,
+    etudiant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Calcule la moyenne d'un étudiant pour une matière spécifique.
+    """
+    user_roles = [role.name for role in current_user.roles]
+
+    if current_user.id != etudiant_id and "professeur" not in user_roles and "admin" not in user_roles and "scolarite" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vous n'avez pas l'autorisation de voir cette moyenne"
+        )
+
+    return handle_request(
+        calculer_moyenne_matiere_etudiant,
+        "Moyenne calculée avec succès",
+        db,
+        etudiant_id,
+        matiere_id
     )

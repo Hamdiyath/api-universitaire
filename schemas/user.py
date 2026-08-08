@@ -37,7 +37,6 @@ class UserCreate(BaseModel):
     role_name: str = Field(..., min_length=2, max_length=50, description="Nom du rôle (ex: etudiant, professeur, admin, scolarite)")
 
 
-# ---------- UNE SEULE DÉFINITION DE UserRead ----------
 class UserRead(UserBase):
     """Données retournées par l'API (sans le mot de passe)"""
     id: int
@@ -45,15 +44,7 @@ class UserRead(UserBase):
     created_at: datetime
     updated_at: datetime
     roles: Optional[List[str]] = []
-
-    class UserRead(UserBase):
-        id: int
-        is_active: bool
-        created_at: datetime
-        updated_at: datetime
-        roles: Optional[List[str]] = []
-        activation_token: Optional[str] = None  # ← DOIT ÊTRE PRÉSENT
-
+    activation_token: Optional[str] = None  # ← ICI
 
     class Config:
         from_attributes = True
@@ -107,3 +98,17 @@ class UserLogin(BaseModel):
     """Données requises pour l'authentification"""
     email: EmailStr
     password: str
+
+
+
+class UserReadAdmin(UserBase):
+    """Données retournées à l'admin (avec token d'activation)"""
+    id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    roles: Optional[List[str]] = []
+
+
+    class Config:
+        from_attributes = True

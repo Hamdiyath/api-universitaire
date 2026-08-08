@@ -206,3 +206,49 @@ def sauvegarder_resultat_semestre(db: Session, etudiant_id: int, semestre: str, 
         )
         new_resultat = create_resultat(db, resultat_data.model_dump())
         return {"action": "cree", "resultat": new_resultat}
+
+
+
+def calculer_moyenne_matiere_etudiant(db: Session, etudiant_id: int, matiere_id: int):
+    """
+    Calcule la moyenne d'un étudiant pour une matière donnée.
+    """
+    from crud.note import get_by_etudiant_and_matiere
+    from crud.matiere import get_by_id as get_matiere_by_id
+
+    # Vérifier que la matière existe
+    matiere = get_matiere_by_id(db, matiere_id)
+    if not matiere:
+        raise HTTPException(status_code=404, detail="Matière non trouvée")
+
+    # Récupérer les notes
+    notes = get_by_etudiant_and_matiere(db, etudiant_id, matiere_id)
+
+    if not notes:
+        return {
+            "etudiant_id": etudiant_id,
+            "matiere_id": matiere_id,
+            "matiere_nom": matiere.nom,
+            "notes": {},
+            "moyenne": None,
+            "statut": "NON_NOTÉ"
+        }
+
+    # Séparer les notes par type
+    notes_par_type = {}
+    for note in notes:
+        type_note = note.type_note
+        notes_par_type[type_note] = note.valeur
+
+    # Calculer la moyenne
+    valeurs = list(notes_par_type.values())
+    moyenne = sum(valeurs) / len(valeurs)
+
+    return {
+        "etudiant_id": etudiant_id,
+        "matiere_id": matiere_id,
+        "matiere_nom": matiere.nom,
+        "notes": notes_par_type,
+        "moyenne": round(moyenne, 2),
+        "statut": "ADMIS" if moyenne >= 10 else "AJOURNÉ"
+    }
