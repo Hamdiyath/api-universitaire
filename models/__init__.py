@@ -10,3 +10,4 @@ from .matiere import Matiere
 from .note import Note
 from .enseignement import Enseignement
 from .inscription import Inscription
+from .matiere_filiere import MatiereFiliere

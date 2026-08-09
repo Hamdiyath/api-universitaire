@@ -5,7 +5,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from typing import List
-
+from typing import Optional
 from database import get_db
 from models.user import User
 from schemas.note import NoteCreate, NoteUpdate, NoteRead
@@ -49,6 +49,7 @@ def get_etudiant_notes(
 @router.get("/matiere/{matiere_id}", response_model=ApiResponse[List[NoteRead]])
 def get_matiere_notes(
     matiere_id: int,
+    filiere_id: Optional[int] = None,  # ← NOUVEAU PARAMÈTRE
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -59,11 +60,11 @@ def get_matiere_notes(
         "Notes récupérées avec succès",
         db,
         matiere_id,
-        current_user,  # ← AJOUTER current_user
+        current_user,
+        filiere_id,  # ← PASSER LE PARAMÈTRE
         skip,
         limit
     )
-
 
 @router.get("/professeur/{professeur_id}", response_model=ApiResponse[List[NoteRead]])
 def get_professeur_notes(

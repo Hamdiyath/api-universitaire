@@ -4,17 +4,17 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
+from typing import Optional
 from database import get_db
 from models.user import User
 from schemas.resultat_semestre import ResultatSemestreRead
+from schemas.bulletin import CloturerSemestreRequest
 from services.bulletin_service import (
     generer_bulletin_etudiant,
     sauvegarder_resultat_semestre,
     calculer_moyenne_semestre,
-    calculer_moyenne_matiere_etudiant
-
-
+    calculer_moyenne_matiere_etudiant,
+    generer_pv_classe
 )
 from core.dependencies import get_current_user, require_role
 from core.handlers import handle_request
@@ -57,13 +57,11 @@ def get_bulletin_etudiant(
     )
 
 
-# ---------- 2. Calculer et sauvegarder les résultats d'un semestre (clôture) ----------
+# ---------- 2. Clôturer un semestre ----------
 # Permission : Admin, Scolarité
 @router.post("/cloturer", response_model=ApiResponse)
 def cloturer_semestre(
-    etudiant_id: int,
-    semestre: str,
-    annee_universitaire: str,
+    data: CloturerSemestreRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(["admin", "scolarite"]))
 ):
@@ -78,9 +76,9 @@ def cloturer_semestre(
         sauvegarder_resultat_semestre,
         "Semestre clôturé avec succès",
         db,
-        etudiant_id,
-        semestre,
-        annee_universitaire
+        data.etudiant_id,
+        data.semestre,
+        data.annee_universitaire
     )
 
 
@@ -149,6 +147,8 @@ def get_calcul_semestre(
     )
 
 
+# ---------- 5. Calculer la moyenne d'une matière pour un étudiant ----------
+# Permission : Étudiant (soi-même), Professeur, Admin, Scolarité
 @router.get("/matiere/{matiere_id}/etudiant/{etudiant_id}", response_model=ApiResponse)
 def get_moyenne_matiere_etudiant(
     matiere_id: int,
@@ -173,4 +173,30 @@ def get_moyenne_matiere_etudiant(
         db,
         etudiant_id,
         matiere_id
+    )
+
+
+# ---------- 6. Procès-verbal de la classe ----------
+# Permission : Admin, Scolarité
+@router.get("/pv/classe", response_model=ApiResponse)
+def get_pv_classe(
+    semestre: str,
+    annee_universitaire: str,
+    filiere_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["admin", "scolarite"]))
+):
+    """
+    Génère le procès-verbal d'une classe.
+    - Liste tous les étudiants avec leurs moyennes
+    - Peut être filtré par filiere_id
+    - Réservé à l'Admin et à la Scolarité
+    """
+    return handle_request(
+        generer_pv_classe,
+        "PV généré avec succès",
+        db,
+        semestre,
+        annee_universitaire,
+        filiere_id
     )

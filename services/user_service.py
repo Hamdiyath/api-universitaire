@@ -10,8 +10,7 @@ from datetime import datetime, timedelta
 
 from crud.user import get_all, get_by_id, update, delete, get_by_email, create
 from crud.role import get_by_name
-from schemas.user import UserUpdate, UserRead, UserUpdateSelf, UserCreate
-
+from schemas.user import UserUpdate, UserRead, UserUpdateSelf, UserCreate, UserReadAdmin
 
 # ---------- Créer un utilisateur (Admin/Scolarité) ----------
 def create_user_account(db: Session, user_data: UserCreate):
@@ -60,7 +59,8 @@ def create_user_account(db: Session, user_data: UserCreate):
     db.commit()
     db.refresh(new_user)
 
-    return new_user
+    # 7. Retourner un schéma Pydantic (pas un objet SQLAlchemy)
+    return UserReadAdmin.model_validate(new_user)
 
 
 # ---------- Récupérer tous les utilisateurs ----------

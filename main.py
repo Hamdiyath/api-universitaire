@@ -1,7 +1,3 @@
-# ============================================================
-# main.py - Point d'entrée de l'API FastAPI
-# ============================================================
-
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from routes import enseignement as enseignements_router
@@ -11,9 +7,11 @@ from routes import auth as auth_router
 from routes import matiere as matiere_router
 from routes import role as role_router
 from routes import filiere as filieres_router
-from routes import note as notes_router          # ← AJOUTER
-from routes import bulletin as bulletins_router  # ← AJOUTER
+from routes import note as notes_router
+from routes import bulletin as bulletins_router
 from core.handlers import setup_exception_handlers
+from routes import matiere_filiere as matieres_filieres_router
+from routes import inscription as inscriptions_router
 
 
 @asynccontextmanager
@@ -39,9 +37,12 @@ app.include_router(filieres_router.router)
 app.include_router(matiere_router.router)
 app.include_router(role_router.router)
 app.include_router(user_router)
-app.include_router(notes_router.router)          # ← AJOUTER
-app.include_router(bulletins_router.router)      # ← AJOUTER
+app.include_router(notes_router.router)
+app.include_router(bulletins_router.router)       # ← une seule fois
 app.include_router(enseignements_router.router)
+app.include_router(matieres_filieres_router.router)
+app.include_router(inscriptions_router.router)
+
 
 @app.get("/")
 def root():

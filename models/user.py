@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Date, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -40,3 +40,5 @@ class User(Base):
 
     # Relations
     roles = relationship("Role", secondary="user_role", back_populates="users")
+    filiere_id = Column(Integer, ForeignKey("filieres.id"), nullable=True)
+    filiere = relationship("Filiere", back_populates="etudiants")

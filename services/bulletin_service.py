@@ -12,7 +12,7 @@ from crud.matiere import get_by_id as get_matiere_by_id
 from crud.user import get_by_id as get_user_by_id
 from crud.resultat_semestre import get_by_etudiant_semestre, create as create_resultat, update as update_resultat
 from models.enums import SessionNote
-from schemas.resultat_semestre import ResultatSemestreCreate
+from schemas.resultat_semestre import ResultatSemestreCreate, ResultatSemestreRead
 
 
 # ============================================================
@@ -171,6 +171,7 @@ def generer_bulletin_etudiant(db: Session, etudiant_id: int, semestre: str, anne
 def sauvegarder_resultat_semestre(db: Session, etudiant_id: int, semestre: str, annee_universitaire: str) -> Dict[str, Any]:
     """
     Sauvegarde le resultat d'un semestre dans la table resultats_semestre.
+    Retourne un schéma Pydantic pour la sérialisation.
     """
     etudiant = get_user_by_id(db, etudiant_id)
     if not etudiant:
@@ -192,7 +193,11 @@ def sauvegarder_resultat_semestre(db: Session, etudiant_id: int, semestre: str, 
             "date_validation": datetime.now(timezone.utc)
         }
         updated = update_resultat(db, existing.id, update_data)
-        return {"action": "mis_a_jour", "resultat": updated}
+        # Retourner un schéma Pydantic
+        return {
+            "action": "mis_a_jour",
+            "resultat": ResultatSemestreRead.model_validate(updated)
+        }
     else:
         resultat_data = ResultatSemestreCreate(
             etudiant_id=etudiant_id,
@@ -205,11 +210,14 @@ def sauvegarder_resultat_semestre(db: Session, etudiant_id: int, semestre: str, 
             commentaire="Cloture officielle du semestre"
         )
         new_resultat = create_resultat(db, resultat_data.model_dump())
-        return {"action": "cree", "resultat": new_resultat}
+        # Retourner un schéma Pydantic
+        return {
+            "action": "cree",
+            "resultat": ResultatSemestreRead.model_validate(new_resultat)
+        }
 
 
-
-def calculer_moyenne_matiere_etudiant(db: Session, etudiant_id: int, matiere_id: int):
+def calculer_moyenne_matiere_etudiant(db: Session, etudiant_id: int, matiere_id: int) -> Dict[str, Any]:
     """
     Calcule la moyenne d'un étudiant pour une matière donnée.
     """
@@ -251,4 +259,60 @@ def calculer_moyenne_matiere_etudiant(db: Session, etudiant_id: int, matiere_id:
         "notes": notes_par_type,
         "moyenne": round(moyenne, 2),
         "statut": "ADMIS" if moyenne >= 10 else "AJOURNÉ"
+    }
+
+
+def generer_pv_classe(
+    db: Session,
+    semestre: str,
+    annee_universitaire: str,
+    filiere_id: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Génère le procès-verbal d'une classe pour un semestre donné.
+    - Si filiere_id est fourni, filtre par filière
+    - Retourne la liste de tous les étudiants avec leurs moyennes
+    """
+    from crud.user import get_all as get_all_users
+    from crud.filiere import get_by_id as get_filiere_by_id
+
+    # 1. Récupérer tous les étudiants
+    tous_etudiants = get_all_users(db)
+    etudiants = [u for u in tous_etudiants if "etudiant" in [r.name for r in u.roles]]
+
+    # 2. Filtrer par filière si demandé
+    if filiere_id is not None:
+        filiere = get_filiere_by_id(db, filiere_id)
+        if not filiere:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Filière non trouvée"
+            )
+        etudiants = [u for u in etudiants if u.filiere_id == filiere_id]
+
+    # 3. Calculer les résultats pour chaque étudiant
+    resultats_etudiants = []
+    for etudiant in etudiants:
+        # Calculer la moyenne du semestre
+        resultats = calculer_moyenne_semestre(db, etudiant.id, semestre, annee_universitaire)
+
+        # Si l'étudiant n'a pas de notes, on l'ignore ou on le garde avec des valeurs vides
+        if resultats["moyenne_semestre"] is not None:
+            resultats_etudiants.append({
+                "etudiant_id": etudiant.id,
+                "nom": etudiant.nom,
+                "prenom": etudiant.prenom,
+                "matricule": etudiant.matricule,
+                "filiere_id": etudiant.filiere_id,
+                "matieres": resultats["matieres"],
+                "moyenne_generale": resultats["moyenne_semestre"],
+                "statut": resultats["statut"]
+            })
+
+    return {
+        "semestre": semestre,
+        "annee_universitaire": annee_universitaire,
+        "filiere_id": filiere_id,
+        "total_etudiants": len(resultats_etudiants),
+        "etudiants": resultats_etudiants
     }

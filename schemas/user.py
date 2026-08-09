@@ -18,12 +18,12 @@ class UserBase(BaseModel):
     photo: Optional[str] = Field(None, max_length=255)
     matricule: Optional[str] = Field(None, max_length=50)
     specialite: Optional[str] = Field(None, max_length=255)
+    filiere_id: Optional[int] = None
 
 
 class UserCreate(BaseModel):
     """
     Données requises pour créer un compte (par Admin/Scolarité).
-    Le mot de passe n'est pas inclus, il sera défini lors de l'activation.
     """
     email: EmailStr
     nom: str = Field(..., min_length=2, max_length=100)
@@ -35,6 +35,7 @@ class UserCreate(BaseModel):
     matricule: Optional[str] = Field(None, max_length=50)
     specialite: Optional[str] = Field(None, max_length=255)
     role_name: str = Field(..., min_length=2, max_length=50, description="Nom du rôle (ex: etudiant, professeur, admin, scolarite)")
+    filiere_id: Optional[int] = None
 
 
 class UserRead(UserBase):
@@ -44,7 +45,6 @@ class UserRead(UserBase):
     created_at: datetime
     updated_at: datetime
     roles: Optional[List[str]] = []
-    activation_token: Optional[str] = None  # ← ICI
 
     class Config:
         from_attributes = True
@@ -52,16 +52,22 @@ class UserRead(UserBase):
     @field_validator('roles', mode='before')
     @classmethod
     def transform_roles(cls, v: Any) -> List[str]:
+        """Transforme une liste d'objets Role en liste de noms"""
+        if v is None:
+            return []
         if isinstance(v, list):
-            return [item.name if hasattr(item, 'name') else str(item) for item in v]
-        return v
+            result = []
+            for item in v:
+                if hasattr(item, 'name'):
+                    result.append(item.name)
+                elif isinstance(item, str):
+                    result.append(item)
+            return result
+        return []
 
 
 class UserUpdate(BaseModel):
-    """
-    Champs modifiables par Admin/Scolarité.
-    Permet la modification complète d'un compte utilisateur.
-    """
+    """Champs modifiables par Admin/Scolarité"""
     email: Optional[EmailStr] = None
     nom: Optional[str] = Field(None, min_length=2, max_length=100)
     prenom: Optional[str] = Field(None, min_length=2, max_length=100)
@@ -71,25 +77,20 @@ class UserUpdate(BaseModel):
     photo: Optional[str] = Field(None, max_length=255)
     matricule: Optional[str] = Field(None, max_length=50)
     specialite: Optional[str] = Field(None, max_length=255)
+    filiere_id: Optional[int] = None
     statut: Optional[str] = None
     is_active: Optional[bool] = None
 
 
 class UserUpdateSelf(BaseModel):
-    """
-    Champs qu'un utilisateur peut modifier sur son propre profil.
-    Les champs officiels (nom, prenom, email, matricule, specialite) sont protégés.
-    """
+    """Champs qu'un utilisateur peut modifier sur son propre profil"""
     telephone: Optional[str] = Field(None, max_length=20)
     adresse: Optional[str] = Field(None, max_length=255)
     photo: Optional[str] = Field(None, max_length=255)
 
 
 class UserActivate(BaseModel):
-    """
-    Données pour l'activation du compte (définition du mot de passe).
-    Le token est passé dans l'URL, pas dans le body.
-    """
+    """Données pour l'activation du compte (définition du mot de passe)"""
     password: str = Field(..., min_length=8, max_length=128)
     password_confirm: str = Field(..., min_length=8, max_length=128)
 
@@ -100,7 +101,6 @@ class UserLogin(BaseModel):
     password: str
 
 
-
 class UserReadAdmin(UserBase):
     """Données retournées à l'admin (avec token d'activation)"""
     id: int
@@ -108,7 +108,23 @@ class UserReadAdmin(UserBase):
     created_at: datetime
     updated_at: datetime
     roles: Optional[List[str]] = []
-
+    activation_token: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+    @field_validator('roles', mode='before')
+    @classmethod
+    def transform_roles_admin(cls, v: Any) -> List[str]:
+        """Transforme une liste d'objets Role en liste de noms"""
+        if v is None:
+            return []
+        if isinstance(v, list):
+            result = []
+            for item in v:
+                if hasattr(item, 'name'):
+                    result.append(item.name)
+                elif isinstance(item, str):
+                    result.append(item)
+            return result
+        return []

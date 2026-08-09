@@ -83,6 +83,12 @@ def update(db: Session, user_id: int, update_data: dict) -> Optional[User]:
     db.refresh(user)
     return user
 
+# ---------- Récupération des utilisateurs par filière ----------
+def get_by_filiere(db: Session, filiere_id: int) -> List[User]:
+    """
+    Récupère tous les utilisateurs d'une filière donnée.
+    """
+    return db.query(User).filter(User.filiere_id == filiere_id).all()
 
 # ---------- Suppression d'un utilisateur ----------
 def delete(db: Session, user_id: int) -> bool:

@@ -4,10 +4,10 @@
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from typing import List
-from datetime import datetime, timezone, timedelta
+from typing import List, Optional
+from datetime import datetime, timezone
 
-from crud.note import get_by_id, get_by_etudiant, get_by_matiere, get_by_professeur, get_all, create, update, delete
+from crud.note import get_by_id, get_by_etudiant, get_all, create, update, delete  ,get_by_professeur, Note
 from crud.user import get_by_id as get_user_by_id
 from crud.matiere import get_by_id as get_matiere_by_id
 from schemas.note import NoteCreate, NoteUpdate, NoteRead
@@ -36,7 +36,6 @@ def can_view_etudiant_notes(db: Session, current_user, etudiant_id: int) -> bool
 
     # 3. Professeur : vérifier si l'étudiant est inscrit dans une de ses matières
     if "professeur" in user_roles:
-        # Récupérer les matières enseignées par ce professeur
         from crud.enseignement import get_by_professeur as get_enseignements_prof
         enseignements = get_enseignements_prof(db, current_user.id)
         matiere_ids = [e.matiere_id for e in enseignements]
@@ -44,8 +43,6 @@ def can_view_etudiant_notes(db: Session, current_user, etudiant_id: int) -> bool
         if not matiere_ids:
             return False
 
-        # Vérifier si l'étudiant est inscrit dans au moins une de ces matières
-        # (via la table inscription ou en vérifiant s'il a des notes dans ces matières)
         from crud.inscription import get_by_etudiant_and_matieres
         inscriptions = get_by_etudiant_and_matieres(db, etudiant_id, matiere_ids)
         if inscriptions:
@@ -91,7 +88,7 @@ def can_modify_note(db: Session, current_user, note_id: int) -> bool:
             return False
         if note.professeur_id != current_user.id:
             return False
-        # Délai de modification : 7 jours après la saisie (avec fuseau horaire)
+        # Délai de modification : 7 jours après la saisie
         if note.date_saisie and (datetime.now(timezone.utc) - note.date_saisie).days > 7:
             return False
         return True
@@ -124,7 +121,6 @@ def create_note(db: Session, note_data: NoteCreate, current_user) -> NoteRead:
     # 3. Si l'utilisateur est professeur (pas admin/scolarité), imposer son ID
     if "professeur" in user_roles and "admin" not in user_roles and "scolarite" not in user_roles:
         professeur_id = current_user.id
-        # Vérifier que le professeur enseigne cette matière
         from crud.enseignement import get_by_professeur_and_matiere
         enseignement = get_by_professeur_and_matiere(db, professeur_id, note_data.matiere_id)
         if not enseignement:
@@ -147,7 +143,9 @@ def create_note(db: Session, note_data: NoteCreate, current_user) -> NoteRead:
 
 
 def get_notes_by_etudiant(db: Session, etudiant_id: int, current_user, skip: int = 0, limit: int = 100) -> List[NoteRead]:
-    """Récupère les notes d'un étudiant avec vérification des permissions."""
+    """
+    Récupère les notes d'un étudiant avec vérification des permissions.
+    """
     if not can_view_etudiant_notes(db, current_user, etudiant_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -162,8 +160,18 @@ def get_notes_by_etudiant(db: Session, etudiant_id: int, current_user, skip: int
     return [NoteRead.model_validate(note) for note in notes]
 
 
-def get_notes_by_matiere(db: Session, matiere_id: int, current_user, skip: int = 0, limit: int = 100) -> List[NoteRead]:
-    """Récupère les notes d'une matière avec vérification des permissions."""
+def get_notes_by_matiere(
+    db: Session,
+    matiere_id: int,
+    current_user,
+    filiere_id: Optional[int] = None,
+    skip: int = 0,
+    limit: int = 100
+) -> List[NoteRead]:
+    """
+    Récupère les notes d'une matière avec vérification des permissions.
+    Peut être filtré par filiere_id (optionnel).
+    """
     if not can_view_matiere_notes(db, current_user, matiere_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -174,12 +182,81 @@ def get_notes_by_matiere(db: Session, matiere_id: int, current_user, skip: int =
     if not matiere:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matière non trouvée")
 
-    notes = get_by_matiere(db, matiere_id, skip, limit)
+    # 1. Récupérer les inscriptions des étudiants pour cette matière
+    from crud.inscription import get_by_matiere as get_inscriptions_by_matiere
+    inscriptions = get_inscriptions_by_matiere(db, matiere_id)
+    etudiant_ids = [i.etudiant_id for i in inscriptions]
+
+    if not etudiant_ids:
+        return []
+
+    # 2. Construire la requête de base
+    query = db.query(Note).filter(
+        Note.matiere_id == matiere_id,
+        Note.etudiant_id.in_(etudiant_ids)
+    )
+
+    # 3. Si filiere_id est fourni, filtrer par filière
+    if filiere_id is not None:
+        from crud.user import get_by_filiere
+        etudiants_filiere = get_by_filiere(db, filiere_id)
+        etudiant_ids_filiere = [u.id for u in etudiants_filiere]
+        query = query.filter(Note.etudiant_id.in_(etudiant_ids_filiere))
+
+    # 4. Appliquer la pagination
+    notes = query.offset(skip).limit(limit).all()
+
     return [NoteRead.model_validate(note) for note in notes]
 
 
+def get_all_notes(db: Session, skip: int = 0, limit: int = 100) -> List[NoteRead]:
+    """
+    Récupère toutes les notes (Admin/Scolarité uniquement).
+    """
+    notes = get_all(db, skip, limit)
+    return [NoteRead.model_validate(note) for note in notes]
+
+
+def get_note_by_id(db: Session, note_id: int) -> NoteRead:
+    """
+    Récupère une note par son ID.
+    """
+    note = get_by_id(db, note_id)
+    if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note non trouvée")
+    return NoteRead.model_validate(note)
+
+
+def update_note(db: Session, note_id: int, note_data: NoteUpdate, current_user) -> NoteRead:
+    """
+    Met à jour une note avec vérification des permissions et des délais.
+    """
+    if not can_modify_note(db, current_user, note_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vous n'avez pas l'autorisation de modifier cette note"
+        )
+
+    update_data = note_data.model_dump(exclude_unset=True)
+    updated_note = update(db, note_id, update_data)
+    return NoteRead.model_validate(updated_note)
+
+
+def delete_note(db: Session, note_id: int):
+    """
+    Supprime une note (Admin/Scolarité uniquement).
+    """
+    existing_note = get_by_id(db, note_id)
+    if not existing_note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note non trouvée")
+
+    delete(db, note_id)
+    return None
+
 def get_notes_by_professeur(db: Session, professeur_id: int, current_user, skip: int = 0, limit: int = 100) -> List[NoteRead]:
-    """Récupère les notes saisies par un professeur avec vérification des permissions."""
+    """
+    Récupère les notes saisies par un professeur avec vérification des permissions.
+    """
     user_roles = [role.name for role in current_user.roles]
 
     if current_user.id != professeur_id and "admin" not in user_roles and "scolarite" not in user_roles:
@@ -194,41 +271,3 @@ def get_notes_by_professeur(db: Session, professeur_id: int, current_user, skip:
 
     notes = get_by_professeur(db, professeur_id, skip, limit)
     return [NoteRead.model_validate(note) for note in notes]
-
-
-def get_all_notes(db: Session, skip: int = 0, limit: int = 100) -> List[NoteRead]:
-    """Récupère toutes les notes (Admin/Scolarité uniquement)."""
-    notes = get_all(db, skip, limit)
-    return [NoteRead.model_validate(note) for note in notes]
-
-
-def get_note_by_id(db: Session, note_id: int) -> NoteRead:
-    """Récupère une note par son ID."""
-    note = get_by_id(db, note_id)
-    if not note:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note non trouvée")
-    return NoteRead.model_validate(note)
-
-
-def update_note(db: Session, note_id: int, note_data: NoteUpdate, current_user) -> NoteRead:
-    """Met à jour une note avec vérification des permissions et des délais."""
-    # Utilisation de la fonction de vérification
-    if not can_modify_note(db, current_user, note_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Vous n'avez pas l'autorisation de modifier cette note"
-        )
-
-    update_data = note_data.model_dump(exclude_unset=True)
-    updated_note = update(db, note_id, update_data)
-    return NoteRead.model_validate(updated_note)
-
-
-def delete_note(db: Session, note_id: int):
-    """Supprime une note (Admin/Scolarité uniquement)."""
-    existing_note = get_by_id(db, note_id)
-    if not existing_note:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note non trouvée")
-
-    delete(db, note_id)
-    return None
