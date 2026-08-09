@@ -80,3 +80,32 @@ def get_by_id(db: Session, enseignement_id: int) -> Optional[Enseignement]:
     Récupère un enseignement par son ID.
     """
     return db.query(Enseignement).filter(Enseignement.id == enseignement_id).first()
+
+
+
+def delete_by_id(db: Session, enseignement_id: int) -> None:
+    """
+    Supprime un enseignement par son ID.
+    """
+    enseignement = db.query(Enseignement).filter(Enseignement.id == enseignement_id).first()
+    if enseignement:
+        db.delete(enseignement)
+        db.commit()
+    return None
+
+# ---------- Mise à jour d'un enseignement ----------
+def update(db: Session, enseignement_id: int, enseignement_data: dict) -> Optional[Enseignement]:
+    """
+    Met à jour un enseignement existant.
+    """
+    enseignement = get_by_id(db, enseignement_id)
+    if not enseignement:
+        return None
+
+    for key, value in enseignement_data.items():
+        if value is not None:
+            setattr(enseignement, key, value)
+
+    db.commit()
+    db.refresh(enseignement)
+    return enseignement

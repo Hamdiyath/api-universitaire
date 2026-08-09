@@ -3,6 +3,7 @@
 # ============================================================
 
 from pydantic import BaseModel, Field
+from typing import Optional
 
 
 class EnseignementBase(BaseModel):
@@ -20,5 +21,13 @@ class EnseignementCreate(EnseignementBase):
 
 class EnseignementRead(EnseignementBase):
     """Données retournées par l'API"""
+    id: int  # ← AJOUTER
     class Config:
         from_attributes = True
+
+
+class EnseignementUpdate(BaseModel):
+    professeur_id: Optional[int] = None
+    matiere_id: Optional[int] = None
+    semestre: Optional[str] = Field(None, min_length=2, max_length=20)
+    annee_universitaire: Optional[str] = Field(None, min_length=4, max_length=20)

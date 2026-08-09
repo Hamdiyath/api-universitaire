@@ -2,7 +2,7 @@
 # routes/matieres_filieres.py - Routes pour les associations Matière-Filière
 # ============================================================
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -53,6 +53,7 @@ def get_associations_by_matiere_route(
 ):
     """
     Récupère toutes les filières associées à une matière.
+    Réservé à l'admin, la scolarité et les professeurs.
     """
     return handle_request(
         get_associations_by_matiere,
@@ -63,16 +64,45 @@ def get_associations_by_matiere_route(
 
 
 # ---------- 3. Récupérer les associations d'une filière ----------
-# Permission : Admin, Scolarité, Professeur
+# Permission : Admin, Scolarité, Professeur (toutes les filières)
+#              Étudiant (uniquement sa propre filière)
 @router.get("/filiere/{filiere_id}", response_model=ApiResponse[List[MatiereFiliereRead]])
 def get_associations_by_filiere_route(
     filiere_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(["admin", "scolarite", "professeur"]))
+    current_user: User = Depends(get_current_user)  # ← Plus de require_role
 ):
     """
     Récupère toutes les matières associées à une filière.
+    - Admin, Scolarité, Professeur : voient toutes les filières
+    - Étudiant : voit uniquement sa propre filière
+    - Autres : accès refusé
     """
+    user_roles = [role.name for role in current_user.roles]
+
+    # 1. Si l'utilisateur est étudiant, il ne peut voir que sa propre filière
+    if "etudiant" in user_roles:
+        # Vérifier que l'étudiant a une filière
+        if current_user.filiere_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Vous n'êtes pas assigné à une filière"
+            )
+        # Vérifier que la filière demandée est la sienne
+        if current_user.filiere_id != filiere_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Vous ne pouvez voir que les matières de votre propre filière"
+            )
+
+    # 2. Admin, Scolarité, Professeur peuvent voir toutes les filières
+    elif "admin" not in user_roles and "scolarite" not in user_roles and "professeur" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vous n'avez pas l'autorisation de voir cette filière"
+        )
+
+    # 3. Récupérer les associations
     return handle_request(
         get_associations_by_filiere,
         "Associations récupérées avec succès",

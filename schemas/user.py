@@ -18,7 +18,7 @@ class UserBase(BaseModel):
     photo: Optional[str] = Field(None, max_length=255)
     matricule: Optional[str] = Field(None, max_length=50)
     specialite: Optional[str] = Field(None, max_length=255)
-    filiere_id: Optional[int] = None
+    filiere_id: Optional[int] = None  # Optionnel dans la base, mais obligatoire pour les étudiants
 
 
 class UserCreate(BaseModel):
@@ -35,7 +35,20 @@ class UserCreate(BaseModel):
     matricule: Optional[str] = Field(None, max_length=50)
     specialite: Optional[str] = Field(None, max_length=255)
     role_name: str = Field(..., min_length=2, max_length=50, description="Nom du rôle (ex: etudiant, professeur, admin, scolarite)")
-    filiere_id: Optional[int] = None
+    filiere_id: Optional[int] = None  # Optionnel dans le schéma, mais validation ci-dessous
+
+    # ---------- Validateur personnalisé ----------
+    @field_validator('filiere_id')
+    @classmethod
+    def validate_filiere_for_etudiant(cls, v: Optional[int], info) -> Optional[int]:
+        """
+        Vérifie que filiere_id est fourni si le rôle est 'etudiant'.
+        """
+        # Récupérer le role_name depuis les données
+        role_name = info.data.get('role_name')
+        if role_name == 'etudiant' and v is None:
+            raise ValueError("Le champ filiere_id est obligatoire pour un étudiant")
+        return v
 
 
 class UserRead(UserBase):

@@ -12,12 +12,14 @@ from crud.user import get_all, get_by_id, update, delete, get_by_email, create
 from crud.role import get_by_name
 from schemas.user import UserUpdate, UserRead, UserUpdateSelf, UserCreate, UserReadAdmin
 
+
 # ---------- Créer un utilisateur (Admin/Scolarité) ----------
 def create_user_account(db: Session, user_data: UserCreate):
     """
     Crée un compte utilisateur (Admin/Scolarité).
     - Vérifie que l'email n'existe pas déjà
     - Vérifie que le rôle existe
+    - Vérifie que filiere_id est fourni pour les étudiants
     - Génère un token d'activation
     - Crée l'utilisateur avec is_active=False
     - Associe le rôle
@@ -38,11 +40,18 @@ def create_user_account(db: Session, user_data: UserCreate):
             detail=f"Le rôle '{user_data.role_name}' n'existe pas"
         )
 
-    # 3. Générer le token d'activation
+    # 3. Vérifier que filiere_id est fourni pour les étudiants
+    if user_data.role_name == "etudiant" and user_data.filiere_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le champ filiere_id est obligatoire pour un étudiant"
+        )
+
+    # 4. Générer le token d'activation
     activation_token = secrets.token_urlsafe(32)
     activation_token_expires = datetime.utcnow() + timedelta(hours=24)
 
-    # 4. Préparer les données
+    # 5. Préparer les données
     user_dict = user_data.model_dump()
     user_dict.pop("role_name")
     user_dict["password_hash"] = None
@@ -50,16 +59,16 @@ def create_user_account(db: Session, user_data: UserCreate):
     user_dict["activation_token"] = activation_token
     user_dict["activation_token_expires"] = activation_token_expires
 
-    # 5. Créer l'utilisateur
+    # 6. Créer l'utilisateur
     new_user = create(db, user_dict)
 
-    # 6. Associer le rôle
+    # 7. Associer le rôle
     new_user.roles.append(role_obj)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    # 7. Retourner un schéma Pydantic (pas un objet SQLAlchemy)
+    # 8. Retourner un schéma Pydantic (pas un objet SQLAlchemy)
     return UserReadAdmin.model_validate(new_user)
 
 

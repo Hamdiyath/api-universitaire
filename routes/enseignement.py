@@ -8,13 +8,14 @@ from typing import List
 
 from database import get_db
 from models.user import User
-from schemas.enseignement import EnseignementCreate, EnseignementRead
+from schemas.enseignement import EnseignementCreate, EnseignementRead , EnseignementUpdate
 from services.enseignement_service import (
     assigner_enseignement,
     get_enseignements_by_professeur,
     get_enseignements_by_matiere,
     get_all_enseignements,
-    supprimer_enseignement
+    supprimer_enseignement,
+    update_enseignement
 )
 from core.dependencies import get_current_user, require_role
 from core.handlers import handle_request
@@ -131,4 +132,25 @@ def delete_enseignement(
         "Enseignement supprimé avec succès",
         db,
         enseignement_id
+    )
+
+# ---------- Modifier un enseignement ----------
+@router.put("/{enseignement_id}", response_model=ApiResponse[EnseignementRead])
+def update_enseignement_route(
+    enseignement_id: int,
+    enseignement_data: EnseignementUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["admin"]))
+):
+    """
+    Modifie un enseignement existant.
+    - Permet de changer le professeur, la matière ou le semestre
+    - Réservé à l'administrateur
+    """
+    return handle_request(
+        update_enseignement,
+        "Enseignement mis à jour avec succès",
+        db,
+        enseignement_id,
+        enseignement_data
     )

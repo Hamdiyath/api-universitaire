@@ -7,9 +7,10 @@ from fastapi import HTTPException, status
 from typing import List, Optional
 from datetime import datetime, timezone
 
-from crud.note import get_by_id, get_by_etudiant, get_all, create, update, delete  ,get_by_professeur, Note
-from crud.user import get_by_id as get_user_by_id
+from crud.note import get_by_id, get_by_etudiant, get_all, create, update, delete, get_by_professeur, Note
+from crud.user import get_by_id as get_user_by_id, get_by_filiere
 from crud.matiere import get_by_id as get_matiere_by_id
+from crud.matiere_filiere import get_by_matiere as get_filieres_by_matiere
 from schemas.note import NoteCreate, NoteUpdate, NoteRead
 
 
@@ -22,7 +23,7 @@ def can_view_etudiant_notes(db: Session, current_user, etudiant_id: int) -> bool
     Vérifie si l'utilisateur peut voir les notes d'un étudiant.
     - Soi-même : OUI
     - Admin ou Scolarité : OUI
-    - Professeur : OUI si l'étudiant est inscrit dans une matière qu'il enseigne
+    - Professeur : OUI si l'étudiant est dans la même filière que lui
     """
     user_roles = [role.name for role in current_user.roles]
 
@@ -34,8 +35,14 @@ def can_view_etudiant_notes(db: Session, current_user, etudiant_id: int) -> bool
     if any(role in user_roles for role in ["admin", "scolarite"]):
         return True
 
-    # 3. Professeur : vérifier si l'étudiant est inscrit dans une de ses matières
+    # 3. Professeur : vérifier si l'étudiant est dans la même filière
     if "professeur" in user_roles:
+        # Récupérer l'étudiant
+        etudiant = get_user_by_id(db, etudiant_id)
+        if not etudiant or not etudiant.filiere_id:
+            return False
+
+        # Récupérer les matières enseignées par le professeur
         from crud.enseignement import get_by_professeur as get_enseignements_prof
         enseignements = get_enseignements_prof(db, current_user.id)
         matiere_ids = [e.matiere_id for e in enseignements]
@@ -43,10 +50,12 @@ def can_view_etudiant_notes(db: Session, current_user, etudiant_id: int) -> bool
         if not matiere_ids:
             return False
 
-        from crud.inscription import get_by_etudiant_and_matieres
-        inscriptions = get_by_etudiant_and_matieres(db, etudiant_id, matiere_ids)
-        if inscriptions:
-            return True
+        # Pour chaque matière enseignée, vérifier si elle est dans la filière de l'étudiant
+        for matiere_id in matiere_ids:
+            filieres = get_filieres_by_matiere(db, matiere_id)
+            filiere_ids = [f.filiere_id for f in filieres]
+            if etudiant.filiere_id in filiere_ids:
+                return True
 
     return False
 
@@ -170,7 +179,7 @@ def get_notes_by_matiere(
 ) -> List[NoteRead]:
     """
     Récupère les notes d'une matière avec vérification des permissions.
-    Peut être filtré par filiere_id (optionnel).
+    Filtré par filière (si fourni).
     """
     if not can_view_matiere_notes(db, current_user, matiere_id):
         raise HTTPException(
@@ -182,10 +191,16 @@ def get_notes_by_matiere(
     if not matiere:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matière non trouvée")
 
-    # 1. Récupérer les inscriptions des étudiants pour cette matière
-    from crud.inscription import get_by_matiere as get_inscriptions_by_matiere
-    inscriptions = get_inscriptions_by_matiere(db, matiere_id)
-    etudiant_ids = [i.etudiant_id for i in inscriptions]
+    # 1. Récupérer les étudiants de la filière (ou de toutes les filières)
+    if filiere_id is not None:
+        etudiants = get_by_filiere(db, filiere_id)
+    else:
+        # Si pas de filière spécifiée, récupérer tous les étudiants
+        from crud.user import get_all as get_all_users
+        tous_etudiants = get_all_users(db)
+        etudiants = [u for u in tous_etudiants if "etudiant" in [r.name for r in u.roles]]
+
+    etudiant_ids = [u.id for u in etudiants]
 
     if not etudiant_ids:
         return []
@@ -196,14 +211,7 @@ def get_notes_by_matiere(
         Note.etudiant_id.in_(etudiant_ids)
     )
 
-    # 3. Si filiere_id est fourni, filtrer par filière
-    if filiere_id is not None:
-        from crud.user import get_by_filiere
-        etudiants_filiere = get_by_filiere(db, filiere_id)
-        etudiant_ids_filiere = [u.id for u in etudiants_filiere]
-        query = query.filter(Note.etudiant_id.in_(etudiant_ids_filiere))
-
-    # 4. Appliquer la pagination
+    # 3. Appliquer la pagination
     notes = query.offset(skip).limit(limit).all()
 
     return [NoteRead.model_validate(note) for note in notes]
@@ -252,6 +260,7 @@ def delete_note(db: Session, note_id: int):
 
     delete(db, note_id)
     return None
+
 
 def get_notes_by_professeur(db: Session, professeur_id: int, current_user, skip: int = 0, limit: int = 100) -> List[NoteRead]:
     """

@@ -11,6 +11,7 @@ from crud.note import get_by_etudiant_and_matiere
 from crud.matiere import get_by_id as get_matiere_by_id
 from crud.user import get_by_id as get_user_by_id
 from crud.resultat_semestre import get_by_etudiant_semestre, create as create_resultat, update as update_resultat
+from crud.matiere_filiere import get_by_filiere as get_matieres_by_filiere
 from models.enums import SessionNote
 from schemas.resultat_semestre import ResultatSemestreCreate, ResultatSemestreRead
 
@@ -78,13 +79,28 @@ def calculer_moyenne_matiere(db: Session, etudiant_id: int, matiere_id: int) -> 
 def calculer_moyenne_semestre(db: Session, etudiant_id: int, semestre: str, annee_universitaire: str) -> Dict[str, Any]:
     """
     Calcule la moyenne d'un semestre pour un étudiant.
+    Récupère les matières de la filière de l'étudiant.
     """
-    from crud.matiere import get_all as get_all_matieres
+    # 1. Récupérer l'étudiant pour connaître sa filière
+    etudiant = get_user_by_id(db, etudiant_id)
+    if not etudiant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Étudiant non trouvé"
+        )
 
-    toutes_matieres = get_all_matieres(db)
-    matieres_semestre = [m for m in toutes_matieres if m.semestre == semestre]
+    # 2. Si l'étudiant n'a pas de filière, retourner une erreur
+    if not etudiant.filiere_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="L'étudiant n'est pas assigné à une filière"
+        )
 
-    if not matieres_semestre:
+    # 3. Récupérer les matières de la filière de l'étudiant
+    associations = get_matieres_by_filiere(db, etudiant.filiere_id)
+    matiere_ids = [a.matiere_id for a in associations if a.semestre == semestre]
+
+    if not matiere_ids:
         return {
             "etudiant_id": etudiant_id,
             "semestre": semestre,
@@ -95,12 +111,32 @@ def calculer_moyenne_semestre(db: Session, etudiant_id: int, semestre: str, anne
             "a_passe_rattrapage": False
         }
 
+    # 4. Récupérer les détails des matières
+    from crud.matiere import get_by_id as get_matiere_by_id
+    matieres = []
+    for matiere_id in matiere_ids:
+        matiere = get_matiere_by_id(db, matiere_id)
+        if matiere:
+            matieres.append(matiere)
+
+    if not matieres:
+        return {
+            "etudiant_id": etudiant_id,
+            "semestre": semestre,
+            "annee_universitaire": annee_universitaire,
+            "matieres": [],
+            "moyenne_semestre": None,
+            "statut": "AUCUNE_MATIERE",
+            "a_passe_rattrapage": False
+        }
+
+    # 5. Calculer les résultats par matière
     resultats_matieres = []
     somme_moyennes_ponderees = 0
     somme_coefficients = 0
     a_passe_rattrapage = False
 
-    for matiere in matieres_semestre:
+    for matiere in matieres:
         resultat = calculer_moyenne_matiere(db, etudiant_id, matiere.id)
         resultat["matiere_nom"] = matiere.nom
         resultat["coefficient"] = matiere.coefficient if hasattr(matiere, 'coefficient') else 1.0
@@ -115,6 +151,7 @@ def calculer_moyenne_semestre(db: Session, etudiant_id: int, semestre: str, anne
 
         resultats_matieres.append(resultat)
 
+    # 6. Calculer la moyenne du semestre
     if somme_coefficients > 0:
         moyenne_semestre = somme_moyennes_ponderees / somme_coefficients
     else:
@@ -193,7 +230,6 @@ def sauvegarder_resultat_semestre(db: Session, etudiant_id: int, semestre: str, 
             "date_validation": datetime.now(timezone.utc)
         }
         updated = update_resultat(db, existing.id, update_data)
-        # Retourner un schéma Pydantic
         return {
             "action": "mis_a_jour",
             "resultat": ResultatSemestreRead.model_validate(updated)
@@ -210,7 +246,6 @@ def sauvegarder_resultat_semestre(db: Session, etudiant_id: int, semestre: str, 
             commentaire="Cloture officielle du semestre"
         )
         new_resultat = create_resultat(db, resultat_data.model_dump())
-        # Retourner un schéma Pydantic
         return {
             "action": "cree",
             "resultat": ResultatSemestreRead.model_validate(new_resultat)
@@ -293,6 +328,10 @@ def generer_pv_classe(
     # 3. Calculer les résultats pour chaque étudiant
     resultats_etudiants = []
     for etudiant in etudiants:
+        # Vérifier que l'étudiant a une filière
+        if not etudiant.filiere_id:
+            continue
+
         # Calculer la moyenne du semestre
         resultats = calculer_moyenne_semestre(db, etudiant.id, semestre, annee_universitaire)
 
