@@ -141,3 +141,8 @@ class UserReadAdmin(UserBase):
                     result.append(item)
             return result
         return []
+
+
+class UserChangePassword(BaseModel):
+    current_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)

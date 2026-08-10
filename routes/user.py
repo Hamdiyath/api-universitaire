@@ -13,7 +13,9 @@ from schemas.user import (
     UserReadAdmin,
     UserUpdate,
     UserUpdateSelf,
-    UserCreate
+    UserCreate,
+    UserChangePassword
+
 )
 from services.user_service import (
     create_user_account,
@@ -21,7 +23,8 @@ from services.user_service import (
     get_user_by_id,
     update_user,
     delete_user,
-    update_user_self
+    update_user_self,
+    update_password
 )
 from core.dependencies import get_current_user, require_role
 from core.handlers import handle_request
@@ -183,3 +186,20 @@ def create_user(
     - Retourne le token d'activation (UserReadAdmin)
     """
     return handle_request(create_user_account, "Compte créé avec succès", db, user_data)
+
+
+# ---------- Modifier son mot de passe ----------
+# Permission : Utilisateur connecté (soi-même)
+@router.put("/me/password", response_model=ApiResponse[UserRead])
+def update_self_password(
+    password_data: UserChangePassword,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return handle_request(
+        update_password,
+        "Mot de passe mis à jour avec succès",
+        db,
+        current_user.id,
+        password_data
+    )

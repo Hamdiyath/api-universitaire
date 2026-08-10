@@ -5,6 +5,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional
+
 from database import get_db
 from models.user import User
 from schemas.resultat_semestre import ResultatSemestreRead
@@ -14,7 +15,8 @@ from services.bulletin_service import (
     sauvegarder_resultat_semestre,
     calculer_moyenne_semestre,
     calculer_moyenne_matiere_etudiant,
-    generer_pv_classe
+    generer_pv_classe,
+    generer_pv_matiere  # ← AJOUTER
 )
 from core.dependencies import get_current_user, require_role
 from core.handlers import handle_request
@@ -24,7 +26,6 @@ router = APIRouter(prefix="/bulletins", tags=["Bulletins"])
 
 
 # ---------- 1. Générer le bulletin d'un étudiant ----------
-# Permission : Étudiant (soi-même), Professeur, Admin, Scolarité
 @router.get("/etudiant/{etudiant_id}", response_model=ApiResponse)
 def get_bulletin_etudiant(
     etudiant_id: int,
@@ -40,7 +41,6 @@ def get_bulletin_etudiant(
     """
     user_roles = [role.name for role in current_user.roles]
 
-    # Vérification des permissions
     if current_user.id != etudiant_id and "professeur" not in user_roles and "admin" not in user_roles and "scolarite" not in user_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -58,7 +58,6 @@ def get_bulletin_etudiant(
 
 
 # ---------- 2. Clôturer un semestre ----------
-# Permission : Admin, Scolarité
 @router.post("/cloturer", response_model=ApiResponse)
 def cloturer_semestre(
     data: CloturerSemestreRequest,
@@ -83,7 +82,6 @@ def cloturer_semestre(
 
 
 # ---------- 3. Récupérer les résultats officiels d'un étudiant ----------
-# Permission : Étudiant (soi-même), Admin, Scolarité
 @router.get("/resultats/{etudiant_id}", response_model=ApiResponse)
 def get_resultats_etudiant(
     etudiant_id: int,
@@ -115,7 +113,6 @@ def get_resultats_etudiant(
 
 
 # ---------- 4. Calculer la moyenne d'un semestre (sans sauvegarder) ----------
-# Permission : Étudiant (soi-même), Professeur, Admin, Scolarité
 @router.get("/calcul/semestre", response_model=ApiResponse)
 def get_calcul_semestre(
     etudiant_id: int,
@@ -148,7 +145,6 @@ def get_calcul_semestre(
 
 
 # ---------- 5. Calculer la moyenne d'une matière pour un étudiant ----------
-# Permission : Étudiant (soi-même), Professeur, Admin, Scolarité
 @router.get("/matiere/{matiere_id}/etudiant/{etudiant_id}", response_model=ApiResponse)
 def get_moyenne_matiere_etudiant(
     matiere_id: int,
@@ -176,8 +172,7 @@ def get_moyenne_matiere_etudiant(
     )
 
 
-# ---------- 6. Procès-verbal de la classe ----------
-# Permission : Admin, Scolarité
+# ---------- 6. Procès-verbal de la classe (Admin/Scolarité) ----------
 @router.get("/pv/classe", response_model=ApiResponse)
 def get_pv_classe(
     semestre: str,
@@ -199,4 +194,53 @@ def get_pv_classe(
         semestre,
         annee_universitaire,
         filiere_id
+    )
+
+
+# ---------- 7. Procès-verbal d'une matière (Professeur) ----------
+@router.get("/pv/matiere/{matiere_id}", response_model=ApiResponse)
+def get_pv_matiere_route(
+    matiere_id: int,
+    semestre: str,
+    annee_universitaire: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["professeur"]))
+):
+    """
+    Génère le procès-verbal d'une matière pour un professeur.
+    - Le professeur ne voit que les étudiants de sa matière
+    - Réservé aux professeurs
+    """
+    return handle_request(
+        generer_pv_matiere,
+        "PV récupéré avec succès",
+        db,
+        matiere_id,
+        semestre,
+        annee_universitaire,
+        current_user
+    )
+
+
+@router.get("/pv/matiere/{matiere_id}", response_model=ApiResponse)
+def get_pv_matiere_route(
+    matiere_id: int,
+    semestre: str,
+    annee_universitaire: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["professeur", "admin", "scolarite"]))
+):
+    """
+    Génère le procès-verbal d'une matière.
+    - Professeur : voit uniquement les étudiants de sa matière
+    - Admin et Scolarité : voient tous les étudiants de la matière
+    """
+    return handle_request(
+        generer_pv_matiere,
+        "PV récupéré avec succès",
+        db,
+        matiere_id,
+        semestre,
+        annee_universitaire,
+        current_user
     )

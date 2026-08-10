@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from crud.user import get_all, get_by_id, update, delete, get_by_email, create
 from crud.role import get_by_name
-from schemas.user import UserUpdate, UserRead, UserUpdateSelf, UserCreate, UserReadAdmin
+from schemas.user import UserUpdate, UserRead, UserUpdateSelf, UserCreate, UserReadAdmin , UserChangePassword
 
 
 # ---------- Créer un utilisateur (Admin/Scolarité) ----------
@@ -136,3 +136,19 @@ def delete_user(db: Session, user_id: int):
         )
     delete(db, user_id)
     return None
+
+#Mettre a jour un mot de passe
+
+def update_password(db: Session, user_id: int, password_data: UserChangePassword) -> UserRead:
+    from core.security import hash_password, verify_password
+
+    user = get_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+    if not verify_password(password_data.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Mot de passe actuel incorrect")
+
+    hashed_password = hash_password(password_data.new_password)
+    updated_user = update(db, user_id, {"password_hash": hashed_password})
+    return UserRead.model_validate(updated_user)
