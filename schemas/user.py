@@ -146,3 +146,23 @@ class UserReadAdmin(UserBase):
 class UserChangePassword(BaseModel):
     current_password: str = Field(..., min_length=8, max_length=128)
     new_password: str = Field(..., min_length=8, max_length=128)
+
+
+from pydantic import BaseModel, EmailStr
+
+class UserActivationInfo(BaseModel):
+    """
+    Filtre automatique pour la route d'activation.
+    Garantit que seules ces 3 informations sont envoyées sur Postman/React.
+    """
+    email: EmailStr
+    nom: str
+    prenom: str
+
+    class Config:
+        # Indique à Pydantic qu'il peut lire et filtrer un objet SQLAlchemy
+        from_attributes = True
+
+
+
+

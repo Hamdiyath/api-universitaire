@@ -74,3 +74,4 @@ def delete(db: Session, matiere_id: int) -> None:
     db.delete(matiere)
     db.commit()
     return None
+

@@ -2,23 +2,15 @@
 # routes/enseignements.py - Routes pour les enseignements
 # ============================================================
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from typing import List
 
 from database import get_db
 from models.user import User
-from schemas.enseignement import EnseignementCreate, EnseignementRead , EnseignementUpdate
-from services.enseignement_service import (
-    assigner_enseignement,
-    get_enseignements_by_professeur,
-    get_enseignements_by_matiere,
-    get_all_enseignements,
-    supprimer_enseignement,
-    update_enseignement
-)
+from schemas.enseignement import EnseignementCreate, EnseignementRead, EnseignementUpdate
+from controllers.enseignement import EnseignementController
 from core.dependencies import get_current_user, require_role
-from core.handlers import handle_request
 from schemas.response import ApiResponse
 
 router = APIRouter(prefix="/enseignements", tags=["Enseignements"])
@@ -32,20 +24,14 @@ def create_enseignement(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(["admin"]))
 ):
-    """
-    Assigner un professeur à une matière.
-    Réservé à l'administrateur.
-    """
-    return handle_request(
-        assigner_enseignement,
-        "Professeur assigné à la matière avec succès",
-        db,
-        enseignement_data
-    )
+    """Assigner un professeur à une matière. Réservé à l'administrateur."""
+    controller = EnseignementController(db)
+    result = controller.assigner_enseignement(enseignement_data)
+    return ApiResponse(success=True, message="Professeur assigné à la matière avec succès", data=result)
 
 
 # ---------- 2. Récupérer les enseignements d'un professeur ----------
-# Permission : Admin, Professeur (soi-même)
+# Permission : Admin, Professeur (soi-même) — logique gérée dans le service
 @router.get("/professeur/{professeur_id}", response_model=ApiResponse[List[EnseignementRead]])
 def get_enseignements_by_professeur_route(
     professeur_id: int,
@@ -57,20 +43,9 @@ def get_enseignements_by_professeur_route(
     - Un professeur ne peut voir que ses propres enseignements
     - Admin peut voir tous les enseignements
     """
-    user_roles = [role.name for role in current_user.roles]
-
-    if current_user.id != professeur_id and "admin" not in user_roles:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Vous n'avez pas l'autorisation de voir ces enseignements"
-        )
-
-    return handle_request(
-        get_enseignements_by_professeur,
-        "Enseignements récupérés avec succès",
-        db,
-        professeur_id
-    )
+    controller = EnseignementController(db)
+    result = controller.get_enseignements_by_professeur(professeur_id, current_user)
+    return ApiResponse(success=True, message="Enseignements récupérés avec succès", data=result)
 
 
 # ---------- 3. Récupérer les professeurs d'une matière ----------
@@ -81,16 +56,10 @@ def get_enseignements_by_matiere_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(["admin", "professeur"]))
 ):
-    """
-    Récupère tous les professeurs qui enseignent une matière.
-    Réservé à l'admin et aux professeurs.
-    """
-    return handle_request(
-        get_enseignements_by_matiere,
-        "Enseignements récupérés avec succès",
-        db,
-        matiere_id
-    )
+    """Récupère tous les professeurs qui enseignent une matière. Réservé à l'admin et aux professeurs."""
+    controller = EnseignementController(db)
+    result = controller.get_enseignements_by_matiere(matiere_id)
+    return ApiResponse(success=True, message="Enseignements récupérés avec succès", data=result)
 
 
 # ---------- 4. Récupérer tous les enseignements ----------
@@ -102,17 +71,10 @@ def get_all_enseignements_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(["admin"]))
 ):
-    """
-    Récupère tous les enseignements (paginé).
-    Réservé à l'administrateur.
-    """
-    return handle_request(
-        get_all_enseignements,
-        "Enseignements récupérés avec succès",
-        db,
-        skip,
-        limit
-    )
+    """Récupère tous les enseignements (paginé). Réservé à l'administrateur."""
+    controller = EnseignementController(db)
+    result = controller.get_all_enseignements(skip, limit)
+    return ApiResponse(success=True, message="Enseignements récupérés avec succès", data=result)
 
 
 # ---------- 5. Supprimer un enseignement ----------
@@ -123,18 +85,14 @@ def delete_enseignement(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(["admin"]))
 ):
-    """
-    Supprime un enseignement (désassigner un professeur d'une matière).
-    Réservé à l'administrateur.
-    """
-    return handle_request(
-        supprimer_enseignement,
-        "Enseignement supprimé avec succès",
-        db,
-        enseignement_id
-    )
+    """Supprime un enseignement (désassigner un professeur d'une matière). Réservé à l'administrateur."""
+    controller = EnseignementController(db)
+    controller.supprimer_enseignement(enseignement_id)
+    return ApiResponse(success=True, message="Enseignement supprimé avec succès", data=None)
 
-# ---------- Modifier un enseignement ----------
+
+# ---------- 6. Modifier un enseignement ----------
+# Permission : Admin uniquement
 @router.put("/{enseignement_id}", response_model=ApiResponse[EnseignementRead])
 def update_enseignement_route(
     enseignement_id: int,
@@ -144,13 +102,9 @@ def update_enseignement_route(
 ):
     """
     Modifie un enseignement existant.
-    - Permet de changer le professeur, la matière ou le semestre
-    - Réservé à l'administrateur
+    Permet de changer le professeur, la matière ou le semestre.
+    Réservé à l'administrateur.
     """
-    return handle_request(
-        update_enseignement,
-        "Enseignement mis à jour avec succès",
-        db,
-        enseignement_id,
-        enseignement_data
-    )
+    controller = EnseignementController(db)
+    result = controller.update_enseignement(enseignement_id, enseignement_data)
+    return ApiResponse(success=True, message="Enseignement mis à jour avec succès", data=result)

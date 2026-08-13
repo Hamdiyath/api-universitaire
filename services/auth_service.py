@@ -1,168 +1,126 @@
 # ============================================================
-# services/auth_service.py - Logique métier pour l'authentification
+# services/auth_service.py - Logique métier Authentification
 # ============================================================
 
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
-from crud.role import get_by_name
-from crud.user import get_by_email, get_by_activation_token, create, update
-from core.security import hash_password, verify_password
-from schemas.user import UserCreate, UserActivate
+# Import des CRUDs sous un namespace propre
+import crud.user as user_crud
+import crud.role as role_crud
+
+# Import des Schémas et Utilitaires de sécurité
+from core.security import hash_password, verify_password, create_access_token
+from schemas.user import UserCreate, UserActivate, UserLogin
+
+# 1. PLUS D'HTTPEXCEPTION : On utilise vos alarmes personnalisées
+from exceptions.base import (
+    InvalidCredentialsError,
+    AccountNotActivatedError,
+    EmailAlreadyExistsError,
+    RoleNotFoundError,
+    PasswordsDoNotMatchError,  # Pensez à l'ajouter à base.py
+    TokenNotFoundError,  # Pensez à l'ajouter à base.py
+    TokenExpiredError,  # Pensez à l'ajouter à base.py
+    AccountAlreadyActiveError
+)
 
 
-# ---------- CONSERVÉ ----------
-def authenticate_user(db: Session, email: str, password: str):
-    """
-    Logique de connexion d'un utilisateur.
-    """
-    user = get_by_email(db, email)
+class AuthService:
+    def __init__(self, db: Session):
+        self.db = db
 
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email ou mot de passe incorrect"
+    # ---------- Connexion & Génération du Token JWT ----------
+    def login_and_generate_token(self, user_data: UserLogin) -> dict:
+        """Valide les identifiants et retourne le token JWT d'une ligne."""
+        user = user_crud.get_by_email(self.db, user_data.email)
+
+        # Alarme : Email inexistant ou mot de passe invalide
+        if not user or not verify_password(user_data.password, user.password_hash):
+            raise InvalidCredentialsError()
+
+        # Alarme : Compte créé par l'admin mais l'étudiant ne l'a pas activé
+        if not user.is_active:
+            raise AccountNotActivatedError()
+
+        # Génération du token (La logique a migré ici !)
+        access_token = create_access_token(
+            data={"sub": str(user.id), "email": user.email}
         )
 
-    if not verify_password(password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email ou mot de passe incorrect"
-        )
+        return {
+            "access_token": access_token,
+            "token_type": "bearer"
+        }
 
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Compte non activé. Veuillez vérifier vos emails."
-        )
+    # ---------- Vérification de validité d'un Token d'Activation ----------
+    def check_token_validity(self, token: str):
+        """Vérifie un token d'activation universitaire."""
+        user = user_crud.get_by_activation_token(self.db, token)
 
-    return user
+        if not user:
+            raise TokenNotFoundError()
 
+        if user.is_active:
+            raise AccountAlreadyActiveError()
 
-# ---------- NOUVEAU ----------
-def generate_activation_token() -> str:
-    """
-    Génère un token d'activation sécurisé.
-    """
-    return secrets.token_urlsafe(32)
+        # Python moderne : on remplace utcnow() obsolète par timezone.utc
+        if user.activation_token_expires and user.activation_token_expires < datetime.now(timezone.utc):
+            raise TokenExpiredError()
 
+        return user
 
-# ---------- NOUVEAU ----------
-def create_user_account(db: Session, user_data: UserCreate, role_name: str):
-    """
-    Crée un compte utilisateur (Admin/Scolarité).
-    - Vérifie que l'email n'existe pas déjà
-    - Vérifie que le rôle existe
-    - Génère un token d'activation
-    - Crée l'utilisateur avec is_active=False
-    - Associe le rôle
-    """
-    # 1. Vérifier si l'email existe déjà
-    existing_user = get_by_email(db, user_data.email)
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cet email est déjà utilisé"
-        )
+    # ---------- Activation du compte ----------
+    def activate_user_account(self, token: str, password_data: UserActivate):
+        """Active le compte de l'étudiant/professeur."""
+        # 1. Alarme : Faute de frappe dans la confirmation
+        if password_data.password != password_data.password_confirm:
+            raise PasswordsDoNotMatchError()
 
-    # 2. Vérifier que le rôle existe
-    role_obj = get_by_name(db, role_name)
-    if not role_obj:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Le rôle '{role_name}' n'existe pas dans le système"
-        )
+        # 2. Récupération et double validation temporelle du token via notre méthode interne
+        user = self.check_token_validity(token)
 
-    # 3. Générer le token d'activation
-    activation_token = generate_activation_token()
-    activation_token_expires = datetime.utcnow() + timedelta(hours=24)
+        # 3. Hachage du mot de passe
+        hashed_password = hash_password(password_data.password)
 
-    # 4. Préparer les données
-    user_dict = user_data.model_dump()
-    user_dict["password_hash"] = None  # Pas de mot de passe initial
-    user_dict["is_active"] = False
-    user_dict["activation_token"] = activation_token
-    user_dict["activation_token_expires"] = activation_token_expires
+        # 4. Préparation et envoi de la mise à jour au CRUD
+        update_data = {
+            "password_hash": hashed_password,
+            "is_active": True,
+            "activation_token": None,
+            "activation_token_expires": None
+        }
+        updated_user = user_crud.update(self.db, user.id, update_data)
 
-    # 5. Créer l'utilisateur
-    new_user = create(db, user_dict)
+        return updated_user
 
-    # 6. Associer le rôle
-    new_user.roles.append(role_obj)
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    # ---------- Créer un utilisateur (Admin/Scolarité) ----------
+    def create_user_account(self, user_data: UserCreate, role_name: str):
+        """Inscrit un nouvel utilisateur en attente d'activation."""
+        if user_crud.get_by_email(self.db, user_data.email):
+            raise EmailAlreadyExistsError(user_data.email)
 
-    return new_user
+        role_obj = role_crud.get_by_name(self.db, role_name)
+        if not role_obj:
+            raise RoleNotFoundError(role_name)
 
+        # Génération du jeton d'activation valable 24h
+        activation_token = secrets.token_urlsafe(32)
+        activation_token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
 
-# ---------- NOUVEAU ----------
-def activate_user_account(db: Session, token: str, password_data: UserActivate):
-    """
-    Active un compte utilisateur.
-    - Vérifie que le token est valide
-    - Vérifie que le token n'a pas expiré
-    - Hache le mot de passe
-    - Active le compte (is_active=True)
-    """
-    # 1. Vérifier que les mots de passe correspondent
-    if password_data.password != password_data.password_confirm:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Les mots de passe ne correspondent pas"
-        )
+        user_dict = user_data.model_dump()
+        user_dict["password_hash"] = None
+        user_dict["is_active"] = False
+        user_dict["activation_token"] = activation_token
+        user_dict["activation_token_expires"] = activation_token_expires
 
-    # 2. Récupérer l'utilisateur par le token
-    user = get_by_activation_token(db, token)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Token d'activation invalide"
-        )
+        new_user = user_crud.create(self.db, user_dict)
+        new_user.roles.append(role_obj)
 
-    # 3. Vérifier que le token n'a pas expiré
-    if user.activation_token_expires and user.activation_token_expires < datetime.utcnow():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Le token d'activation a expiré. Veuillez contacter la scolarité."
-        )
+        self.db.add(new_user)
+        self.db.commit()
+        self.db.refresh(new_user)
 
-    # 4. Vérifier que le compte n'est pas déjà activé
-    if user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Ce compte est déjà activé"
-        )
-
-    # 5. Hacher le mot de passe
-    hashed_password = hash_password(password_data.password)
-
-    # 6. Mettre à jour l'utilisateur
-    update_data = {
-        "password_hash": hashed_password,
-        "is_active": True,
-        "activation_token": None,
-        "activation_token_expires": None
-    }
-    updated_user = update(db, user.id, update_data)
-
-    return updated_user
-
-
-# ---------- NOUVEAU (à implémenter plus tard) ----------
-def send_activation_email(email: str, token: str, nom: str, prenom: str):
-    """
-    Envoie un email d'activation avec le lien.
-    À implémenter avec SMTP ou une API de messagerie.
-    """
-    # TODO: Implémenter l'envoi d'email
-    # Lien d'activation : https://universite.com/auth/activate/{token}
-    print(f"📧 Email d'activation pour {nom} {prenom} ({email})")
-    print(f"🔗 Lien : /auth/activate/{token}")
-    # Pour la version finale, remplacer par un vrai envoi d'email
-
-
-# ---------- SUPPRIMÉ ----------
-# def register_user(): ...  # <-- SUPPRIMÉ
+        # Simulation asynchrone (À lier plus tard avec send_activation_email)
+        return new_user

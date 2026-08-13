@@ -1,112 +1,63 @@
-# ============================================================
-# core/dependencies.py - Récupération de l'utilisateur courant
-# ============================================================
 
-from fastapi import Depends, HTTPException, status
+
+from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from typing import Optional
+from sqlalchemy.orm import Session
+
 from core.security import SECRET_KEY, ALGORITHM
-from database import SessionLocal
+from database import get_db
+from crud import user as user_crud
 from models.user import User
 
-# Configuration du schéma OAuth2
+from exceptions.base import (
+    InvalidCredentialsError,
+    AccountSuspendedError,
+    AccountNotActivatedError,
+    InsufficientPermissionsError
+)
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
-    """
-    Récupère l'utilisateur actuel à partir du token JWT.
-    Vérifie que le compte existe, est actif et activé.
-    """
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Identifiants invalides",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     try:
-        # 1. Décodage du token
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-
-        # 2. Extraction du user_id
         user_id_str: Optional[str] = payload.get("sub")
         if user_id_str is None:
-            raise credentials_exception
+            raise InvalidCredentialsError()
         user_id = int(user_id_str)
-
-        # 3. Récupération de l'email (optionnel)
-        email: Optional[str] = payload.get("email")
-        if email is None:
-            raise credentials_exception
-
     except (JWTError, ValueError):
-        raise credentials_exception
+        raise InvalidCredentialsError()
 
-    # 4. Recherche de l'utilisateur en base
-    db = SessionLocal()
-    try:
-        user = db.query(User).filter(User.id == user_id).first()
-        if user is None:
-            raise credentials_exception
+    user = user_crud.get_by_id(db, user_id)
+    if user is None:
+        raise InvalidCredentialsError()
 
-        # Vérification du statut
-        if user.statut != "actif":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Compte inactif ou suspendu"
-            )
+    if user.statut != "actif":
+        raise AccountSuspendedError()
 
-        # Vérification que le compte est activé
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Compte non activé. Veuillez vérifier vos emails."
-            )
+    if not user.is_active:
+        raise AccountNotActivatedError()
 
-        # Chargement des rôles avant fermeture de la session
-        _ = user.roles
-
-        return user
-    finally:
-        db.close()
-
-
-def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
-    """
-    Vérifie que l'utilisateur est actif.
-    (Fonction de sécurité supplémentaire pour les routes sensibles)
-    """
-    if current_user.statut != "actif":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Compte inactif ou suspendu"
-        )
-    return current_user
+    return user
 
 
 def require_role(required_roles: list[str]):
-    """
-    Dépendance pour vérifier si l'utilisateur connecté possède un rôle spécifique.
-
-    Args:
-        required_roles (list[str]): Liste des rôles autorisés
-
-    Returns:
-        Callable: Dépendance FastAPI
-
-    Utilisation:
-        current_user: User = Depends(require_role(["admin", "scolarite"]))
-    """
-
     def role_checker(current_user: User = Depends(get_current_user)):
         user_roles = [role.name for role in current_user.roles]
-        for role in required_roles:
-            if role in user_roles:
-                return current_user
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Accès refusé. Rôles requis: {required_roles}"
-        )
-
+        has_access = any(role in user_roles for role in required_roles)
+        if not has_access:
+            raise InsufficientPermissionsError(required_roles)
+        return current_user
     return role_checker
+
+
+def can_view_user_profile(user_id: int, current_user: User = Depends(get_current_user)):
+    user_roles = [role.name for role in current_user.roles]
+    is_owner = current_user.id == user_id
+    is_privileged = "admin" in user_roles or "scolarite" in user_roles
+    if not is_owner and not is_privileged:
+        raise InsufficientPermissionsError(["admin", "scolarite"])
+    return current_user

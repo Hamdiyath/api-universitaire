@@ -1,94 +1,68 @@
-
+# ============================================================
 # services/filiere_service.py - Logique métier pour Filiere
-
+# ============================================================
 
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
-
 from crud.filiere import get_by_nom, get_by_id, create, update, delete
 from schemas.filiere import FiliereCreate, FiliereUpdate, FiliereRead
+from typing import List
+from crud.filiere import get_by_nom, get_by_id, get_all, create, update, delete
+
+from exceptions.base import FiliereNotFoundError, FiliereAlreadyExistsError
 
 
-# ---------- Création d'une filière ----------
-def create_filiere(db: Session, filiere_data: FiliereCreate):
-    """
-    Crée une nouvelle filière.
-    Vérifie que le nom n'existe pas déjà.
-    """
-    # 1. Vérifier si le nom existe déjà
-    existing_filiere = get_by_nom(db, filiere_data.nom)
-    if existing_filiere:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cette filière existe déjà"
-        )
+class FiliereService:
+    """Service de gestion des filières. Contient toute la logique métier."""
 
-    # 2. Créer la filière
-    new_filiere = create(db, filiere_data.model_dump())
-    return FiliereRead.model_validate(new_filiere)
+    def __init__(self, db: Session):
+        self.db = db
 
+    # ---------- Création ----------
+    def create_filiere(self, filiere_data: FiliereCreate) -> FiliereRead:
+        """Crée une nouvelle filière. Vérifie que le nom n'existe pas déjà."""
+        existing_filiere = get_by_nom(self.db, filiere_data.nom)
+        if existing_filiere:
+            raise FiliereAlreadyExistsError(filiere_data.nom)
 
-# ---------- Récupération d'une filière par ID ----------
-def get_filiere_by_id(db: Session, filiere_id: int):
-    """
-    Récupère une filière par son ID.
-    Lève une exception si la filière n'existe pas.
-    """
-    filiere = get_by_id(db, filiere_id)
-    if not filiere:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Filière non trouvée"
-        )
-    return filiere
+        new_filiere = create(self.db, filiere_data.model_dump())
+        return FiliereRead.model_validate(new_filiere)
 
+    # ---------- Lecture ----------
+    def get_filiere_by_id(self, filiere_id: int) -> FiliereRead:
+        """Récupère une filière par son ID."""
+        filiere = get_by_id(self.db, filiere_id)
+        if not filiere:
+            raise FiliereNotFoundError(filiere_id)
+        return FiliereRead.model_validate(filiere)
 
-# ---------- Mise à jour d'une filière ----------
-def update_filiere(db: Session, filiere_id: int, filiere_data: FiliereUpdate):
-    """
-    Met à jour une filière existante.
-    Vérifie que la filière existe.
-    Vérifie que le nouveau nom n'est pas déjà utilisé (si le nom est modifié).
-    """
-    # 1. Vérifier que la filière existe
-    existing_filiere = get_by_id(db, filiere_id)
-    if not existing_filiere:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Filière non trouvée"
-        )
+    # ---------- Mise à jour ----------
+    def update_filiere(self, filiere_id: int, filiere_data: FiliereUpdate) -> FiliereRead:
+        """Met à jour une filière existante."""
+        existing_filiere = get_by_id(self.db, filiere_id)
+        if not existing_filiere:
+            raise FiliereNotFoundError(filiere_id)
 
-    # 2. Convertir en dict et filtrer les champs None
-    update_data = filiere_data.model_dump(exclude_unset=True)
+        update_data = filiere_data.model_dump(exclude_unset=True)
 
-    # 3. Si le nom est modifié, vérifier qu'il n'est pas déjà utilisé
-    if "nom" in update_data and update_data["nom"] != existing_filiere.nom:
-        nom_exists = get_by_nom(db, update_data["nom"])
-        if nom_exists:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Ce nom est déjà utilisé par une autre filière"
-            )
+        if "nom" in update_data and update_data["nom"] != existing_filiere.nom:
+            nom_exists = get_by_nom(self.db, update_data["nom"])
+            if nom_exists:
+                raise FiliereAlreadyExistsError(update_data["nom"])
 
-    # 4. Mettre à jour la filière
-    updated_filiere = update(db, filiere_id, update_data)
-    return updated_filiere
+        updated_filiere = update(self.db, filiere_id, update_data)
+        return FiliereRead.model_validate(updated_filiere)
+
+    # ---------- Suppression ----------
+    def delete_filiere(self, filiere_id: int) -> None:
+        """Supprime une filière."""
+        existing_filiere = get_by_id(self.db, filiere_id)
+        if not existing_filiere:
+            raise FiliereNotFoundError(filiere_id)
+        delete(self.db, filiere_id)
 
 
-# ---------- Suppression d'une filière ----------
-def delete_filiere(db: Session, filiere_id: int):
-    """
-    Supprime une filière.
-    Vérifie que la filière existe.
-    """
-    # 1. Vérifier que la filière existe
-    existing_filiere = get_by_id(db, filiere_id)
-    if not existing_filiere:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Filière non trouvée"
-        )
-
-    # 2. Supprimer la filière
-    delete(db, filiere_id)
-    return None
+# ---------- Liste ----------
+    def get_all_filieres(self, skip: int = 0, limit: int = 100) -> List[FiliereRead]:
+        """Récupère toutes les filières (paginé)."""
+        filieres = get_all(self.db, skip, limit)
+        return [FiliereRead.model_validate(f) for f in filieres]

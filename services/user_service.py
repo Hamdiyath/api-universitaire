@@ -1,154 +1,171 @@
 # ============================================================
-# services/user_service.py - Logique métier pour la gestion des utilisateurs (hors auth)
+# services/user_service.py - Logique métier pour User
 # ============================================================
 
-from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
-from typing import List
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
+from typing import List
 
-from crud.user import get_all, get_by_id, update, delete, get_by_email, create
-from crud.role import get_by_name
-from schemas.user import UserUpdate, UserRead, UserUpdateSelf, UserCreate, UserReadAdmin , UserChangePassword
+from sqlalchemy.orm import Session
 
+from crud import user as user_crud
+from crud import role as role_crud
 
-# ---------- Créer un utilisateur (Admin/Scolarité) ----------
-def create_user_account(db: Session, user_data: UserCreate):
-    """
-    Crée un compte utilisateur (Admin/Scolarité).
-    - Vérifie que l'email n'existe pas déjà
-    - Vérifie que le rôle existe
-    - Vérifie que filiere_id est fourni pour les étudiants
-    - Génère un token d'activation
-    - Crée l'utilisateur avec is_active=False
-    - Associe le rôle
-    """
-    # 1. Vérifier si l'email existe déjà
-    existing_user = get_by_email(db, user_data.email)
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cet email est déjà utilisé"
-        )
+from schemas.user import (
+    UserCreate,
+    UserRead,
+    UserReadAdmin,
+    UserUpdate,
+    UserUpdateSelf,
+    UserChangePassword
+)
 
-    # 2. Vérifier que le rôle existe
-    role_obj = get_by_name(db, user_data.role_name)
-    if not role_obj:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Le rôle '{user_data.role_name}' n'existe pas"
-        )
+from exceptions.base import (
+    UserNotFoundError,
+    EmailAlreadyExistsError,
+    RoleNotFoundError,
+    FiliereRequiredError,
+    AccountAlreadyActiveError,
+    InvalidPasswordError
+)
 
-    # 3. Vérifier que filiere_id est fourni pour les étudiants
-    if user_data.role_name == "etudiant" and user_data.filiere_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Le champ filiere_id est obligatoire pour un étudiant"
-        )
-
-    # 4. Générer le token d'activation
-    activation_token = secrets.token_urlsafe(32)
-    activation_token_expires = datetime.utcnow() + timedelta(hours=24)
-
-    # 5. Préparer les données
-    user_dict = user_data.model_dump()
-    user_dict.pop("role_name")
-    user_dict["password_hash"] = None
-    user_dict["is_active"] = False
-    user_dict["activation_token"] = activation_token
-    user_dict["activation_token_expires"] = activation_token_expires
-
-    # 6. Créer l'utilisateur
-    new_user = create(db, user_dict)
-
-    # 7. Associer le rôle
-    new_user.roles.append(role_obj)
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    # 8. Retourner un schéma Pydantic (pas un objet SQLAlchemy)
-    return UserReadAdmin.model_validate(new_user)
+from core.security import hash_password, verify_password
 
 
-# ---------- Récupérer tous les utilisateurs ----------
-def get_all_users(db: Session, skip: int = 0, limit: int = 100) -> List[UserRead]:
-    users = get_all(db, skip, limit)
-    return [UserRead.model_validate(user) for user in users]
+class UserService:
+    """Service de gestion des utilisateurs. Contient toute la logique métier."""
+
+    def __init__(self, db: Session):
+        self.db = db
 
 
-# ---------- Récupérer un utilisateur par son ID ----------
-def get_user_by_id(db: Session, user_id: int) -> dict:
-    user = get_by_id(db, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Utilisateur non trouvé"
-        )
-    return UserRead.model_validate(user).model_dump()
+    # ---------- Création ----------
+    def create_user_account(self, user_data: UserCreate) -> UserReadAdmin:
+        """Crée un nouvel utilisateur."""
+        # Vérifier si l'email existe déjà
+        if user_crud.get_by_email(self.db, user_data.email):
+            raise EmailAlreadyExistsError(user_data.email)
+
+        # Vérifier que le rôle existe
+        role_obj = role_crud.get_by_name(self.db, user_data.role_name)
+        if not role_obj:
+            raise RoleNotFoundError(user_data.role_name)
+
+        # Vérifier qu'un étudiant a une filière
+        if user_data.role_name == "etudiant" and user_data.filiere_id is None:
+            raise FiliereRequiredError()
+
+        # Générer le token d'activation
+        activation_token = secrets.token_urlsafe(32)
+        activation_token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+
+        # Préparer les données
+        user_dict = user_data.model_dump()
+        user_dict.pop("role_name")
+        user_dict["password_hash"] = None
+        user_dict["is_active"] = False
+        user_dict["activation_token"] = activation_token
+        user_dict["activation_token_expires"] = activation_token_expires
+
+        # Créer l'utilisateur
+        new_user = user_crud.create(self.db, user_dict)
+
+        # Associer le rôle
+        new_user.roles.append(role_obj)
+        self.db.add(new_user)
+        self.db.commit()
+        self.db.refresh(new_user)
+
+        return UserReadAdmin.model_validate(new_user)
 
 
-# ---------- Mettre à jour un utilisateur (Admin/Scolarité) ----------
-def update_user(db: Session, user_id: int, user_data: UserUpdate) -> UserRead:
-    user = get_by_id(db, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Utilisateur non trouvé"
-        )
+    # ---------- Lecture ----------
+    def get_all_users(self, skip: int = 0, limit: int = 100) -> List[UserRead]:
+        """Récupère tous les utilisateurs."""
+        users = user_crud.get_all(self.db, skip, limit)
+        return [UserRead.model_validate(user) for user in users]
 
-    update_data = user_data.model_dump(exclude_unset=True)
-
-    if "email" in update_data:
-        existing = get_by_email(db, update_data["email"])
-        if existing and existing.id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cet email est déjà utilisé par un autre compte"
-            )
-
-    updated_user = update(db, user_id, update_data)
-    return UserRead.model_validate(updated_user)
+    def get_user_by_id(self, user_id: int) -> UserRead:
+        """Récupère un utilisateur par son ID."""
+        user = user_crud.get_by_id(self.db, user_id)
+        if not user:
+            raise UserNotFoundError(user_id)
+        return UserRead.model_validate(user)
 
 
-# ---------- Mettre à jour son propre profil (Utilisateur connecté) ----------
-def update_user_self(db: Session, user_id: int, user_data: UserUpdateSelf) -> UserRead:
-    user = get_by_id(db, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Utilisateur non trouvé"
-        )
+    # ---------- Mise à jour ----------
+    def update_user(self, user_id: int, user_data: UserUpdate) -> UserRead:
+        """Met à jour un utilisateur (Admin/Scolarité)."""
+        user = user_crud.get_by_id(self.db, user_id)
+        if not user:
+            raise UserNotFoundError(user_id)
 
-    update_data = user_data.model_dump(exclude_unset=True)
-    updated_user = update(db, user_id, update_data)
-    return UserRead.model_validate(updated_user)
+        update_data = user_data.model_dump(exclude_unset=True)
+
+        # Vérifier l'email si modifié
+        if "email" in update_data:
+            existing = user_crud.get_by_email(self.db, update_data["email"])
+            if existing and existing.id != user_id:
+                raise EmailAlreadyExistsError(update_data["email"])
+
+        updated_user = user_crud.update(self.db, user_id, update_data)
+        return UserRead.model_validate(updated_user)
+
+    def update_user_self(self, user_id: int, user_data: UserUpdateSelf) -> UserRead:
+        """Met à jour son propre profil."""
+        user = user_crud.get_by_id(self.db, user_id)
+        if not user:
+            raise UserNotFoundError(user_id)
+
+        update_data = user_data.model_dump(exclude_unset=True)
+        updated_user = user_crud.update(self.db, user_id, update_data)
+        return UserRead.model_validate(updated_user)
+
+    def update_password(self, user_id: int, password_data: UserChangePassword) -> UserRead:
+        """Met à jour le mot de passe."""
+        user = user_crud.get_by_id(self.db, user_id)
+        if not user:
+            raise UserNotFoundError(user_id)
+
+        # Vérifier l'ancien mot de passe
+        if not verify_password(password_data.current_password, user.password_hash):
+            raise InvalidPasswordError()
+
+        # Hacher le nouveau mot de passe
+        hashed_password = hash_password(password_data.new_password)
+        updated_user = user_crud.update(self.db, user_id, {"password_hash": hashed_password})
+        return UserRead.model_validate(updated_user)
 
 
-# ---------- Supprimer un utilisateur ----------
-def delete_user(db: Session, user_id: int):
-    user = get_by_id(db, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Utilisateur non trouvé"
-        )
-    delete(db, user_id)
-    return None
+    # ---------- Suppression ----------
+    def delete_user(self, user_id: int) -> None:
+        """Supprime un utilisateur."""
+        user = user_crud.get_by_id(self.db, user_id)
+        if not user:
+            raise UserNotFoundError(user_id)
+        user_crud.delete(self.db, user_id)
 
-#Mettre a jour un mot de passe
 
-def update_password(db: Session, user_id: int, password_data: UserChangePassword) -> UserRead:
-    from core.security import hash_password, verify_password
+    # ---------- Activation ----------
+    def renvoyer_token_activation(self, user_id: int) -> dict:
+        """Génère un nouveau token d'activation."""
+        user = user_crud.get_by_id(self.db, user_id)
+        if not user:
+            raise UserNotFoundError(user_id)
 
-    user = get_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        if user.is_active:
+            raise AccountAlreadyActiveError()
 
-    if not verify_password(password_data.current_password, user.password_hash):
-        raise HTTPException(status_code=400, detail="Mot de passe actuel incorrect")
+        new_token = secrets.token_urlsafe(32)
+        new_expiry = datetime.now(timezone.utc) + timedelta(hours=24)
 
-    hashed_password = hash_password(password_data.new_password)
-    updated_user = update(db, user_id, {"password_hash": hashed_password})
-    return UserRead.model_validate(updated_user)
+        user_crud.update(self.db, user_id, {
+            "activation_token": new_token,
+            "activation_token_expires": new_expiry
+        })
+
+        return {
+            "user_id": user_id,
+            "activation_token": new_token,
+            "expires_at": new_expiry
+        }

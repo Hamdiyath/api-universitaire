@@ -1,10 +1,6 @@
-# ============================================================
+
 # routes/notes.py - Routes pour la gestion des notes
-# ============================================================
-# Les vérifications de permission sont déléguées aux services
-# via les fonctions can_view_*, qui utilisent désormais la
-# logique d'héritage par filière plutôt que les inscriptions.
-# ============================================================
+
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
@@ -12,18 +8,8 @@ from typing import List, Optional
 from database import get_db
 from models.user import User
 from schemas.note import NoteCreate, NoteUpdate, NoteRead
-from services.note_service import (
-    create_note,
-    get_notes_by_etudiant,
-    get_notes_by_matiere,
-    get_notes_by_professeur,
-    get_all_notes,
-    get_note_by_id,
-    update_note,
-    delete_note
-)
+from controllers.note import NoteController
 from core.dependencies import get_current_user, require_role
-from core.handlers import handle_request
 from schemas.response import ApiResponse
 
 router = APIRouter(prefix="/notes", tags=["Notes"])
@@ -42,7 +28,9 @@ def create_new_note(
     - Professeur : ne peut créer que pour ses matières
     - Admin/Scolarité : peuvent créer pour toutes les matières
     """
-    return handle_request(create_note, "Note créée avec succès", db, note_data, current_user)
+    controller = NoteController(db)
+    result = controller.create_note(note_data, current_user)
+    return ApiResponse(success=True, message="Note créée avec succès", data=result)
 
 
 # ---------- 2. Voir les notes d'un étudiant ----------
@@ -61,15 +49,9 @@ def get_etudiant_notes(
     - Professeur : voit les notes des étudiants de sa filière
     - Admin/Scolarité : voit toutes les notes
     """
-    return handle_request(
-        get_notes_by_etudiant,
-        "Notes récupérées avec succès",
-        db,
-        etudiant_id,
-        current_user,
-        skip,
-        limit
-    )
+    controller = NoteController(db)
+    result = controller.get_notes_by_etudiant(etudiant_id, current_user, skip, limit)
+    return ApiResponse(success=True, message="Notes récupérées avec succès", data=result)
 
 
 # ---------- 3. Voir les notes d'une matière ----------
@@ -89,16 +71,9 @@ def get_matiere_notes(
     - Professeur : ne voit que les étudiants de sa filière
     - Admin/Scolarité : voit tous les étudiants
     """
-    return handle_request(
-        get_notes_by_matiere,
-        "Notes récupérées avec succès",
-        db,
-        matiere_id,
-        current_user,
-        filiere_id,
-        skip,
-        limit
-    )
+    controller = NoteController(db)
+    result = controller.get_notes_by_matiere(matiere_id, current_user, filiere_id, skip, limit)
+    return ApiResponse(success=True, message="Notes récupérées avec succès", data=result)
 
 
 # ---------- 4. Voir les notes saisies par un professeur ----------
@@ -116,15 +91,9 @@ def get_professeur_notes(
     - Un professeur ne peut voir que ses propres saisies
     - Admin/Scolarité peuvent voir toutes les saisies
     """
-    return handle_request(
-        get_notes_by_professeur,
-        "Notes récupérées avec succès",
-        db,
-        professeur_id,
-        current_user,
-        skip,
-        limit
-    )
+    controller = NoteController(db)
+    result = controller.get_notes_by_professeur(professeur_id, current_user, skip, limit)
+    return ApiResponse(success=True, message="Notes récupérées avec succès", data=result)
 
 
 # ---------- 5. Voir toutes les notes ----------
@@ -140,7 +109,9 @@ def get_all_notes_route(
     Récupère toutes les notes (paginé).
     Réservé à l'Admin et à la Scolarité.
     """
-    return handle_request(get_all_notes, "Notes récupérées avec succès", db, skip, limit)
+    controller = NoteController(db)
+    result = controller.get_all_notes(skip, limit)
+    return ApiResponse(success=True, message="Notes récupérées avec succès", data=result)
 
 
 # ---------- 6. Voir une note par ID ----------
@@ -155,7 +126,9 @@ def get_note_by_id_route(
     Récupère une note par son ID.
     Réservé aux professeurs, administrateurs et scolarité.
     """
-    return handle_request(get_note_by_id, "Note récupérée avec succès", db, note_id)
+    controller = NoteController(db)
+    result = controller.get_note_by_id(note_id)
+    return ApiResponse(success=True, message="Note récupérée avec succès", data=result)
 
 
 # ---------- 7. Modifier une note ----------
@@ -172,7 +145,9 @@ def update_existing_note(
     - Professeur : peut modifier ses propres notes (délai 7 jours)
     - Admin/Scolarité : peuvent modifier toutes les notes
     """
-    return handle_request(update_note, "Note mise à jour avec succès", db, note_id, note_data)
+    controller = NoteController(db)
+    result = controller.update_note(note_id, note_data, current_user)
+    return ApiResponse(success=True, message="Note mise à jour avec succès", data=result)
 
 
 # ---------- 8. Supprimer une note ----------
@@ -181,10 +156,12 @@ def update_existing_note(
 def delete_existing_note(
     note_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(["admin", "scolarite"]))
+    current_user: User = Depends(require_role(["admin"]))
 ):
     """
     Supprime une note.
-    Réservé à l'Admin et à la Scolarité.
+    Réservé à l'Admin.
     """
-    return handle_request(delete_note, "Note supprimée avec succès", db, note_id)
+    controller = NoteController(db)
+    controller.delete_note(note_id)
+    return ApiResponse(success=True, message="Note supprimée avec succès", data=None)

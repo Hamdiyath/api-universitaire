@@ -1,78 +1,114 @@
-# ============================================================
-# core/handlers.py - Gestionnaire de réponses et exceptions
-# ============================================================
 
-from typing import Callable
-from fastapi import FastAPI, Request, status, HTTPException
-from fastapi.exceptions import RequestValidationError
+# core/handlers.py - Gestionnaire global d'exceptions
+
+
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import IntegrityError
+from fastapi.exceptions import RequestValidationError
 
-from schemas.response import ApiResponse
-
-
-# ---------- Gestionnaire pour les routes ----------
-def handle_request(service_func: Callable, success_message: str = "Opération réussie", *args, **kwargs) -> ApiResponse:
-    """
-    Exécute une fonction de service et retourne une réponse standardisée.
-    """
-    try:
-        result = service_func(*args, **kwargs)
-        return ApiResponse(
-            success=True,
-            message=success_message,
-            data=result
-        )
-    except IntegrityError as e:
-        # Gestion des erreurs d'intégrité de la base de données
-        if "UNIQUE constraint" in str(e):
-            return ApiResponse(
-                success=False,
-                message="Cette valeur est déjà utilisée (contrainte d'unicité)",
-                data=None
-            )
-        return ApiResponse(
-            success=False,
-            message=f"Erreur d'intégrité de la base de données: {str(e)}",
-            data=None
-        )
-    except HTTPException as e:
-        return ApiResponse(
-            success=False,
-            message=e.detail,
-            data=None
-        )
-    except Exception as e:
-        return ApiResponse(
-            success=False,
-            message=f"Erreur interne du serveur: {str(e)}",
-            data=None
-        )
+from exceptions.base import (
+    AppError,
+    UserNotFoundError,
+    FiliereNotFoundError,
+    MatiereNotFoundError,
+    NoteNotFoundError,
+    EnseignementNotFoundError,
+    SemestreNotFoundError,
+    MatiereFiliereNotFoundError,
+    EmailAlreadyExistsError,
+    EnseignementAlreadyExistsError,
+    InscriptionAlreadyExistsError,
+    MatiereFiliereAlreadyExistsError,
+    NoteModificationDeniedError,
+    NoteModificationDelayError,
+    AccountAlreadyActiveError,
+    InvalidPasswordError,
+    FiliereRequiredError,
+    PermissionDeniedError,
+)
 
 
-# ---------- Gestionnaire pour les exceptions globales ----------
 def setup_exception_handlers(app: FastAPI):
-    """
-    Enregistre tous les handlers d'exceptions globaux sur l'application FastAPI.
-    """
+    """Configure les gestionnaires d'exceptions pour l'application."""
 
-    @app.exception_handler(HTTPException)
-    async def custom_http_exception_handler(request: Request, exc: HTTPException):
+    @app.exception_handler(AppError)
+    def app_error_handler(request: Request, exc: AppError):
+        status_code = 400
+        error_code = "BAD_REQUEST"
+
+        # ---------- 404 Not Found ----------
+        if isinstance(exc, (
+            UserNotFoundError,
+            FiliereNotFoundError,
+            MatiereNotFoundError,
+            NoteNotFoundError,
+            EnseignementNotFoundError,
+            SemestreNotFoundError,
+            MatiereFiliereNotFoundError
+        )):
+            status_code = 404
+            error_code = "NOT_FOUND"
+
+        # ---------- 403 Forbidden ----------
+        elif isinstance(exc, (NoteModificationDeniedError, NoteModificationDelayError)):
+            status_code = 403
+            error_code = "FORBIDDEN"
+
+        # ---------- 409 Conflict (Doublons) ----------
+        elif isinstance(exc, (
+            EmailAlreadyExistsError,
+            EnseignementAlreadyExistsError,
+            InscriptionAlreadyExistsError,
+            MatiereFiliereAlreadyExistsError
+        )):
+            status_code = 409
+            error_code = "CONFLICT"
+
+        # ---------- 400 Bad Request (Règles métier) ----------
+        elif isinstance(exc, (AccountAlreadyActiveError, InvalidPasswordError, FiliereRequiredError)):
+            status_code = 400
+            error_code = "BAD_REQUEST"
+
+        elif isinstance(exc, (NoteModificationDeniedError, NoteModificationDelayError, PermissionDeniedError)):
+            status_code = 403
+            error_code = "FORBIDDEN"
+
         return JSONResponse(
-            status_code=exc.status_code,
-            content={"success": False, "message": exc.detail, "data": None},
+            status_code=status_code,
+            content={
+                "success": False,
+                "message": exc.message,
+                "data": {
+                    "error_code": error_code,
+                    "type": exc.__class__.__name__
+                }
+            }
         )
 
     @app.exception_handler(RequestValidationError)
-    async def custom_validation_exception_handler(request: Request, exc: RequestValidationError):
+    def validation_error_handler(request: Request, exc: RequestValidationError):
+        first_err = exc.errors()[0]
+        field = first_err.get("loc", [])[-1]
+        msg = first_err.get("msg")
+
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={"success": False, "message": "Données d'entrée invalides ou manquantes", "data": None},
+            content={
+                "success": False,
+                "message": f"Champ '{field}' invalide : {msg}",
+                "data": None
+            }
         )
 
     @app.exception_handler(Exception)
-    async def global_internal_error_handler(request: Request, exc: Exception):
+    def global_exception_handler(request: Request, exc: Exception):
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"success": False, "message": "Erreur interne du serveur", "data": None},
+            content={
+                "success": False,
+                "message": "Erreur interne du serveur",
+                "data": None
+            }
         )
+
+

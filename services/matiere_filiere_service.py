@@ -3,7 +3,6 @@
 
 
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
 from typing import List
 
 from crud.matiere_filiere import (
@@ -18,108 +17,93 @@ from crud.matiere import get_by_id as get_matiere_by_id
 from crud.filiere import get_by_id as get_filiere_by_id
 from schemas.matiere_filiere import MatiereFiliereCreate, MatiereFiliereRead
 
+from exceptions.base import (
+    MatiereNotFoundError,
+    FiliereNotFoundError,
+    MatiereFiliereNotFoundError,
+    MatiereFiliereAlreadyExistsError,
+    PermissionDeniedError,
+    FiliereRequiredError,
+)
 
-# ---------- Création d'une association ----------
-def associer_matiere_filiere(db: Session, association_data: MatiereFiliereCreate):
-    """
-    Associe une matière à une filière pour un semestre donné.
-    Vérifie que la matière et la filière existent.
-    Vérifie que l'association n'existe pas déjà.
-    """
-    # 1. Vérifier que la matière existe
-    matiere = get_matiere_by_id(db, association_data.matiere_id)
-    if not matiere:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Matière non trouvée"
+
+class MatiereFiliereService:
+    """Service de gestion des associations Matière-Filière."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    # ---------- Création ----------
+    def associer_matiere_filiere(self, association_data: MatiereFiliereCreate) -> MatiereFiliereRead:
+        """
+        Associe une matière à une filière pour un semestre donné.
+        Vérifie que la matière et la filière existent, et que l'association n'existe pas déjà.
+        """
+        matiere = get_matiere_by_id(self.db, association_data.matiere_id)
+        if not matiere:
+            raise MatiereNotFoundError(association_data.matiere_id)
+
+        filiere = get_filiere_by_id(self.db, association_data.filiere_id)
+        if not filiere:
+            raise FiliereNotFoundError(association_data.filiere_id)
+
+        existing = get_by_id(
+            self.db,
+            association_data.matiere_id,
+            association_data.filiere_id,
+            association_data.semestre
         )
+        if existing:
+            raise MatiereFiliereAlreadyExistsError()
 
-    # 2. Vérifier que la filière existe
-    filiere = get_filiere_by_id(db, association_data.filiere_id)
-    if not filiere:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Filière non trouvée"
-        )
+        new_association = create(self.db, association_data.model_dump())
+        return MatiereFiliereRead.model_validate(new_association)
 
-    # 3. Vérifier que l'association n'existe pas déjà
-    existing = get_by_id(
-        db,
-        association_data.matiere_id,
-        association_data.filiere_id,
-        association_data.semestre
-    )
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cette matière est déjà associée à cette filière pour ce semestre"
-        )
+    # ---------- Lecture par matière ----------
+    def get_associations_by_matiere(self, matiere_id: int) -> List[MatiereFiliereRead]:
+        """Récupère toutes les associations d'une matière."""
+        matiere = get_matiere_by_id(self.db, matiere_id)
+        if not matiere:
+            raise MatiereNotFoundError(matiere_id)
 
-    # 4. Créer l'association
-    new_association = create(db, association_data.model_dump())
-    return MatiereFiliereRead.model_validate(new_association)
+        associations = get_by_matiere(self.db, matiere_id)
+        return [MatiereFiliereRead.model_validate(a) for a in associations]
 
+    # ---------- Lecture par filière (avec permissions) ----------
+    def get_associations_by_filiere(self, filiere_id: int, current_user) -> List[MatiereFiliereRead]:
+        """
+        Récupère toutes les associations d'une filière.
+        - Admin, Scolarité, Professeur : voient toutes les filières
+        - Étudiant : voit uniquement sa propre filière
+        - Autres : accès refusé
+        """
+        user_roles = [role.name for role in current_user.roles]
 
-# ---------- Récupération des associations par matière ----------
-def get_associations_by_matiere(db: Session, matiere_id: int) -> List[MatiereFiliereRead]:
-    """
-    Récupère toutes les associations d'une matière.
-    Vérifie que la matière existe.
-    """
-    matiere = get_matiere_by_id(db, matiere_id)
-    if not matiere:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Matière non trouvée"
-        )
+        if "etudiant" in user_roles:
+            if current_user.filiere_id is None:
+                raise FiliereRequiredError()
+            if current_user.filiere_id != filiere_id:
+                raise PermissionDeniedError("Vous ne pouvez voir que les matières de votre propre filière")
+        elif not any(role in user_roles for role in ["admin", "scolarite", "professeur"]):
+            raise PermissionDeniedError("Vous n'avez pas l'autorisation de voir cette filière")
 
-    associations = get_by_matiere(db, matiere_id)
-    return [MatiereFiliereRead.model_validate(a) for a in associations]
+        filiere = get_filiere_by_id(self.db, filiere_id)
+        if not filiere:
+            raise FiliereNotFoundError(filiere_id)
 
+        associations = get_by_filiere(self.db, filiere_id)
+        return [MatiereFiliereRead.model_validate(a) for a in associations]
 
-# ---------- Récupération des associations par filière ----------
-def get_associations_by_filiere(db: Session, filiere_id: int) -> List[MatiereFiliereRead]:
-    """
-    Récupère toutes les associations d'une filière.
-    Vérifie que la filière existe.
-    """
-    filiere = get_filiere_by_id(db, filiere_id)
-    if not filiere:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Filière non trouvée"
-        )
+    # ---------- Lecture globale ----------
+    def get_all_associations(self, skip: int = 0, limit: int = 100) -> List[MatiereFiliereRead]:
+        """Récupère toutes les associations (paginé)."""
+        associations = get_all(self.db, skip, limit)
+        return [MatiereFiliereRead.model_validate(a) for a in associations]
 
-    associations = get_by_filiere(db, filiere_id)
-    return [MatiereFiliereRead.model_validate(a) for a in associations]
-
-
-# ---------- Récupération de toutes les associations ----------
-def get_all_associations(db: Session, skip: int = 0, limit: int = 100) -> List[MatiereFiliereRead]:
-    """
-    Récupère toutes les associations (paginé).
-    """
-    associations = get_all(db, skip, limit)
-    return [MatiereFiliereRead.model_validate(a) for a in associations]
-
-
-# ---------- Suppression d'une association ----------
-def supprimer_association(
-    db: Session,
-    matiere_id: int,
-    filiere_id: int,
-    semestre: str
-):
-    """
-    Supprime une association matière-filière.
-    Vérifie que l'association existe.
-    """
-    existing = get_by_id(db, matiere_id, filiere_id, semestre)
-    if not existing:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Association non trouvée"
-        )
-
-    delete(db, matiere_id, filiere_id, semestre)
-    return None
+    # ---------- Suppression ----------
+    def supprimer_association(self, matiere_id: int, filiere_id: int, semestre: str) -> None:
+        """Supprime une association matière-filière."""
+        existing = get_by_id(self.db, matiere_id, filiere_id, semestre)
+        if not existing:
+            raise MatiereFiliereNotFoundError()
+        delete(self.db, matiere_id, filiere_id, semestre)
