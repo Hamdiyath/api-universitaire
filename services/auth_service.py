@@ -55,8 +55,9 @@ class AuthService:
         }
 
     # ---------- Vérification de validité d'un Token d'Activation ----------
+    # Dans app/services/auth_service.py (Ligne 69)
+
     def check_token_validity(self, token: str):
-        """Vérifie un token d'activation universitaire."""
         user = user_crud.get_by_activation_token(self.db, token)
 
         if not user:
@@ -65,8 +66,8 @@ class AuthService:
         if user.is_active:
             raise AccountAlreadyActiveError()
 
-        # Python moderne : on remplace utcnow() obsolète par timezone.utc
-        if user.activation_token_expires and user.activation_token_expires < datetime.now(timezone.utc):
+        # CORRECTION : Comparaison naive vs naive
+        if user.activation_token_expires and user.activation_token_expires < datetime.utcnow():
             raise TokenExpiredError()
 
         return user

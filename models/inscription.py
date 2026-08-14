@@ -5,6 +5,7 @@
 # Un étudiant peut être inscrit à plusieurs matières.
 # Une matière peut avoir plusieurs étudiants inscrits.
 # ============================================================
+from tkinter.constants import CASCADE
 
 from sqlalchemy import Column, Integer, ForeignKey, String
 from sqlalchemy.orm import relationship
@@ -15,7 +16,7 @@ class Inscription(Base):
     __tablename__ = "inscriptions"
 
     # Clé primaire composite (etudiant_id, matiere_id, semestre)
-    etudiant_id = Column(Integer, ForeignKey("users.id"), primary_key=True, nullable=False)
+    etudiant_id = Column(Integer, ForeignKey("users.id", ondelete=CASCADE), primary_key=True, nullable=False)
     matiere_id = Column(Integer, ForeignKey("matieres.id"), primary_key=True, nullable=False)
     semestre = Column(String(20), primary_key=True, nullable=False)
     annee_universitaire = Column(String(20), nullable=False)

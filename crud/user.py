@@ -102,3 +102,6 @@ def delete(db: Session, user_id: int) -> bool:
     db.delete(user)
     db.commit()
     return True
+
+def get_by_matricule(db: Session, matricule: str):
+    return db.query(User).filter(User.matricule == matricule).first()

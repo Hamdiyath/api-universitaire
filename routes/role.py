@@ -1,6 +1,5 @@
-# ============================================================
 # routes/role.py - Routes pour la gestion des rôles (Épurées)
-# ============================================================
+
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
@@ -53,8 +52,7 @@ def get_all_roles(
     """Récupérer tous les rôles (paginé) (Réservé à l'Admin)."""
     # Note: On passe par le contrôleur pour l'accès aux données globales
     controller = RoleController(db)
-    result = controller.role_service.role_crud.get_all(db, skip, limit)
-
+    result = controller.get_all_roles()
     return {
         "message": "Rôles récupérés avec succès",
         "data": result

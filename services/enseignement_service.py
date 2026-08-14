@@ -24,7 +24,7 @@ from exceptions.base import (
     MatiereNotFoundError,
     EnseignementNotFoundError,
     EnseignementAlreadyExistsError,
-    PermissionDeniedError
+    InsufficientPermissionsError,
 )
 
 
@@ -59,7 +59,7 @@ class EnseignementService:
         new_enseignement = create(self.db, enseignement_data.model_dump())
         return EnseignementRead.model_validate(new_enseignement)
 
-        # ---------- 2. Récupérer les enseignements d'un professeur ----------
+    # ---------- 2. Récupérer les enseignements d'un professeur ----------
     def get_enseignements_by_professeur(self, professeur_id: int, current_user) -> List[EnseignementRead]:
         """
         Récupère toutes les matières enseignées par un professeur.
@@ -68,8 +68,9 @@ class EnseignementService:
         """
         user_roles = [role.name for role in current_user.roles]
 
+        # 🛠️ AJOUT : Utilisation de votre alarme du fichier base.py (sans texte en dur)
         if current_user.id != professeur_id and "admin" not in user_roles:
-            raise PermissionDeniedError("Vous n'avez pas l'autorisation de voir ces enseignements")
+            raise InsufficientPermissionsError(["admin", "Propriétaire du compte"])
 
         professeur = get_user_by_id(self.db, professeur_id)
         if not professeur:

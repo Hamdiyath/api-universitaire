@@ -26,3 +26,6 @@ class RoleController:
     def delete_role(self, role_id: int):
         """Transmet la suppression du rôle au service."""
         return self.role_service.delete_role(role_id)
+
+    def get_all_roles(self):
+        return self.role_service.get_all_roles()

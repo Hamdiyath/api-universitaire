@@ -17,8 +17,8 @@ class EnseignementController:
     def assigner_enseignement(self, enseignement_data):
         return self.service.assigner_enseignement(enseignement_data)
 
-    def get_enseignements_by_professeur(self, professeur_id):
-        return self.service.get_enseignements_by_professeur(professeur_id)
+    def get_enseignements_by_professeur(self,  professeur_id: int, current_user):
+        return self.service.get_enseignements_by_professeur(professeur_id, current_user)
 
     def get_enseignements_by_matiere(self, matiere_id):
         return self.service.get_enseignements_by_matiere(matiere_id)

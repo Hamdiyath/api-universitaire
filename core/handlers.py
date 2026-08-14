@@ -59,6 +59,7 @@ def setup_exception_handlers(app: FastAPI):
             EmailAlreadyExistsError,
             EnseignementAlreadyExistsError,
             InscriptionAlreadyExistsError,
+            MatiereFiliereAlreadyExistsError,
             MatiereFiliereAlreadyExistsError
         )):
             status_code = 409

@@ -68,3 +68,8 @@ class RoleService:
 
         role_crud.delete(self.db, role_id)
         return None
+
+
+    def get_all_roles(self) -> List[RoleRead]:
+       role = role_crud.get_all(self.db)
+       return [RoleRead.model_validate(f) for f in role]

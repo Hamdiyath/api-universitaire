@@ -1,6 +1,6 @@
-# ============================================================
+
 # services/note_service.py - Logique métier pour Note
-# ============================================================
+
 
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -91,9 +91,9 @@ class NoteService:
 
         return False
 
-    # ============================================================
+
     # FONCTIONS MÉTIER
-    # ============================================================
+
 
     def create_note(self, note_data: NoteCreate, current_user) -> NoteRead:
         user_roles = [role.name for role in current_user.roles]
@@ -129,6 +129,11 @@ class NoteService:
         etudiant = get_user_by_id(self.db, etudiant_id)
         if not etudiant:
             raise UserNotFoundError(etudiant_id)
+
+        # AJOUTER CETTE VÉRIFICATION :
+        user_roles = [role.name for role in etudiant.roles]
+        if "etudiant" not in user_roles:
+            raise PermissionDeniedError("L'utilisateur ciblé n'est pas un étudiant")
 
         notes = get_by_etudiant(self.db, etudiant_id, skip, limit)
         return [NoteRead.model_validate(note) for note in notes]

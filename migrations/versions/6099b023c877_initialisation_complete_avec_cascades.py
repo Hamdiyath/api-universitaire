@@ -1,8 +1,8 @@
-"""Initialisation complete
+"""Initialisation complete avec cascades
 
-Revision ID: 05c7e7a2df9d
+Revision ID: 6099b023c877
 Revises: 
-Create Date: 2026-08-09 22:25:23.422017
+Create Date: 2026-08-14 11:52:51.899468
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '05c7e7a2df9d'
+revision: str = '6099b023c877'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -27,10 +27,8 @@ def upgrade() -> None:
     sa.Column('description', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('filieres', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_filieres_id'), ['id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_filieres_nom'), ['nom'], unique=True)
-
+    op.create_index(op.f('ix_filieres_id'), 'filieres', ['id'], unique=False)
+    op.create_index(op.f('ix_filieres_nom'), 'filieres', ['nom'], unique=True)
     op.create_table('matieres',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('code', sa.String(length=50), nullable=False),
@@ -40,23 +38,19 @@ def upgrade() -> None:
     sa.Column('niveau', sa.String(length=20), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('matieres', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_matieres_code'), ['code'], unique=True)
-        batch_op.create_index(batch_op.f('ix_matieres_id'), ['id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_matieres_niveau'), ['niveau'], unique=False)
-        batch_op.create_index(batch_op.f('ix_matieres_nom'), ['nom'], unique=False)
-        batch_op.create_index(batch_op.f('ix_matieres_semestre'), ['semestre'], unique=False)
-
+    op.create_index(op.f('ix_matieres_code'), 'matieres', ['code'], unique=True)
+    op.create_index(op.f('ix_matieres_id'), 'matieres', ['id'], unique=False)
+    op.create_index(op.f('ix_matieres_niveau'), 'matieres', ['niveau'], unique=False)
+    op.create_index(op.f('ix_matieres_nom'), 'matieres', ['nom'], unique=False)
+    op.create_index(op.f('ix_matieres_semestre'), 'matieres', ['semestre'], unique=False)
     op.create_table('roles',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=50), nullable=False),
     sa.Column('description', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('roles', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_roles_id'), ['id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_roles_name'), ['name'], unique=True)
-
+    op.create_index(op.f('ix_roles_id'), 'roles', ['id'], unique=False)
+    op.create_index(op.f('ix_roles_name'), 'roles', ['name'], unique=True)
     op.create_table('matiere_filiere',
     sa.Column('matiere_id', sa.Integer(), nullable=False),
     sa.Column('filiere_id', sa.Integer(), nullable=False),
@@ -89,10 +83,8 @@ def upgrade() -> None:
     sa.UniqueConstraint('activation_token'),
     sa.UniqueConstraint('matricule')
     )
-    with op.batch_alter_table('users', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_users_email'), ['email'], unique=True)
-        batch_op.create_index(batch_op.f('ix_users_id'), ['id'], unique=False)
-
+    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
     op.create_table('enseignements',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('professeur_id', sa.Integer(), nullable=False),
@@ -100,19 +92,17 @@ def upgrade() -> None:
     sa.Column('semestre', sa.String(length=20), nullable=False),
     sa.Column('annee_universitaire', sa.String(length=20), nullable=False),
     sa.ForeignKeyConstraint(['matiere_id'], ['matieres.id'], ),
-    sa.ForeignKeyConstraint(['professeur_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['professeur_id'], ['users.id'], ondelete='cascade'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('professeur_id', 'matiere_id', 'semestre', name='uq_enseignement')
     )
-    with op.batch_alter_table('enseignements', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_enseignements_id'), ['id'], unique=False)
-
+    op.create_index(op.f('ix_enseignements_id'), 'enseignements', ['id'], unique=False)
     op.create_table('inscriptions',
     sa.Column('etudiant_id', sa.Integer(), nullable=False),
     sa.Column('matiere_id', sa.Integer(), nullable=False),
     sa.Column('semestre', sa.String(length=20), nullable=False),
     sa.Column('annee_universitaire', sa.String(length=20), nullable=False),
-    sa.ForeignKeyConstraint(['etudiant_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['etudiant_id'], ['users.id'], ondelete='cascade'),
     sa.ForeignKeyConstraint(['matiere_id'], ['matieres.id'], ),
     sa.PrimaryKeyConstraint('etudiant_id', 'matiere_id', 'semestre')
     )
@@ -129,14 +119,12 @@ def upgrade() -> None:
     sa.Column('date_saisie', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.Column('commentaire', sa.String(length=255), nullable=True),
     sa.Column('coefficient', sa.Float(), nullable=False),
-    sa.ForeignKeyConstraint(['etudiant_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['etudiant_id'], ['users.id'], ondelete='cascade'),
     sa.ForeignKeyConstraint(['matiere_id'], ['matieres.id'], ),
-    sa.ForeignKeyConstraint(['professeur_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['professeur_id'], ['users.id'], ondelete='cascade'),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('notes', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_notes_id'), ['id'], unique=False)
-
+    op.create_index(op.f('ix_notes_id'), 'notes', ['id'], unique=False)
     op.create_table('resultats_semestre',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('etudiant_id', sa.Integer(), nullable=False),
@@ -152,9 +140,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['etudiant_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('resultats_semestre', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_resultats_semestre_id'), ['id'], unique=False)
-
+    op.create_index(op.f('ix_resultats_semestre_id'), 'resultats_semestre', ['id'], unique=False)
     op.create_table('user_role',
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('role_id', sa.Integer(), nullable=False),
@@ -170,41 +156,27 @@ def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_table('user_role')
-    with op.batch_alter_table('resultats_semestre', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_resultats_semestre_id'))
-
+    op.drop_index(op.f('ix_resultats_semestre_id'), table_name='resultats_semestre')
     op.drop_table('resultats_semestre')
-    with op.batch_alter_table('notes', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_notes_id'))
-
+    op.drop_index(op.f('ix_notes_id'), table_name='notes')
     op.drop_table('notes')
     op.drop_table('inscriptions')
-    with op.batch_alter_table('enseignements', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_enseignements_id'))
-
+    op.drop_index(op.f('ix_enseignements_id'), table_name='enseignements')
     op.drop_table('enseignements')
-    with op.batch_alter_table('users', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_users_id'))
-        batch_op.drop_index(batch_op.f('ix_users_email'))
-
+    op.drop_index(op.f('ix_users_id'), table_name='users')
+    op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     op.drop_table('matiere_filiere')
-    with op.batch_alter_table('roles', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_roles_name'))
-        batch_op.drop_index(batch_op.f('ix_roles_id'))
-
+    op.drop_index(op.f('ix_roles_name'), table_name='roles')
+    op.drop_index(op.f('ix_roles_id'), table_name='roles')
     op.drop_table('roles')
-    with op.batch_alter_table('matieres', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_matieres_semestre'))
-        batch_op.drop_index(batch_op.f('ix_matieres_nom'))
-        batch_op.drop_index(batch_op.f('ix_matieres_niveau'))
-        batch_op.drop_index(batch_op.f('ix_matieres_id'))
-        batch_op.drop_index(batch_op.f('ix_matieres_code'))
-
+    op.drop_index(op.f('ix_matieres_semestre'), table_name='matieres')
+    op.drop_index(op.f('ix_matieres_nom'), table_name='matieres')
+    op.drop_index(op.f('ix_matieres_niveau'), table_name='matieres')
+    op.drop_index(op.f('ix_matieres_id'), table_name='matieres')
+    op.drop_index(op.f('ix_matieres_code'), table_name='matieres')
     op.drop_table('matieres')
-    with op.batch_alter_table('filieres', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_filieres_nom'))
-        batch_op.drop_index(batch_op.f('ix_filieres_id'))
-
+    op.drop_index(op.f('ix_filieres_nom'), table_name='filieres')
+    op.drop_index(op.f('ix_filieres_id'), table_name='filieres')
     op.drop_table('filieres')
     # ### end Alembic commands ###

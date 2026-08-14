@@ -26,7 +26,9 @@ from exceptions.base import (
     RoleNotFoundError,
     FiliereRequiredError,
     AccountAlreadyActiveError,
-    InvalidPasswordError
+    InvalidPasswordError,
+    MatriculeAlreadyExistsError
+
 )
 
 from core.security import hash_password, verify_password
@@ -45,6 +47,10 @@ class UserService:
         # Vérifier si l'email existe déjà
         if user_crud.get_by_email(self.db, user_data.email):
             raise EmailAlreadyExistsError(user_data.email)
+
+        if user_data.matricule:
+            if user_crud.get_by_matricule(self.db, user_data.matricule):
+                raise MatriculeAlreadyExistsError(user_data.matricule)  #
 
         # Vérifier que le rôle existe
         role_obj = role_crud.get_by_name(self.db, user_data.role_name)
@@ -169,3 +175,5 @@ class UserService:
             "activation_token": new_token,
             "expires_at": new_expiry
         }
+
+

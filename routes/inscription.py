@@ -1,6 +1,5 @@
-# ============================================================
 # routes/inscription.py - Routes pures pour les inscriptions
-# ============================================================
+
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session

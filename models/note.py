@@ -1,3 +1,5 @@
+from tkinter.constants import CASCADE
+
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float, Enum
 from sqlalchemy.sql import func
 from database import Base
@@ -10,9 +12,9 @@ class Note(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # Clés étrangères (tout le monde est dans users)
-    etudiant_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    etudiant_id = Column(Integer, ForeignKey("users.id", ondelete=CASCADE), nullable=False)
     matiere_id = Column(Integer, ForeignKey("matieres.id"), nullable=False)
-    professeur_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    professeur_id = Column(Integer, ForeignKey("users.id", ondelete=CASCADE), nullable=False)
 
     # La note
     valeur = Column(Float, nullable=False)  # ← Changé en Float

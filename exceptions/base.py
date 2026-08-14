@@ -151,6 +151,16 @@ class InsufficientPermissionsError(AppError):
         super().__init__(f"Accès refusé. Rôles requis : {required_roles}")
 
 
+class MatriculeAlreadyExistsError(AppError):
+    """Levée quand un matricule étudiant est déjà attribué."""
+    def __init__(self, matricule: str):
+        super().__init__(
+            f"Le matricule '{matricule}' est déjà attribué à un autre étudiant."
+
+        )
+
+
+
 
 # ---------- Authentification & Tokens ----------
 
@@ -195,7 +205,6 @@ class MatiereAlreadyExistsError(AppError):
     def __init__(self, nom: str):
         self.message = f"Une matière avec le nom '{nom}' existe déjà"
         super().__init__(self.message)
-
 
 
 class FiliereAlreadyExistsError(AppError):

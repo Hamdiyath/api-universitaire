@@ -1,4 +1,6 @@
 
+# core/dependencies.py - Centre de contrôle des accès
+
 
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
@@ -51,6 +53,7 @@ def require_role(required_roles: list[str]):
         if not has_access:
             raise InsufficientPermissionsError(required_roles)
         return current_user
+
     return role_checker
 
 
@@ -60,4 +63,21 @@ def can_view_user_profile(user_id: int, current_user: User = Depends(get_current
     is_privileged = "admin" in user_roles or "scolarite" in user_roles
     if not is_owner and not is_privileged:
         raise InsufficientPermissionsError(["admin", "scolarite"])
+    return current_user
+
+
+# 🛠️ AJOUT : Gardien pour filtrer l'accès aux enseignements des professeurs
+def can_view_professeur_enseignements(professeur_id: int, current_user: User = Depends(get_current_user)):
+    """
+    Règle de sécurité : Un professeur ne peut voir que ses propres enseignements.
+    L'administration (admin, scolarite) passe sans blocage.
+    """
+    user_roles = [role.name for role in current_user.roles]
+
+    is_owner = current_user.id == professeur_id
+    is_privileged = "admin" in user_roles or "scolarite" in user_roles
+
+    if not is_owner and not is_privileged:
+        raise InsufficientPermissionsError(["admin", "scolarite", "Propriétaire"])
+
     return current_user

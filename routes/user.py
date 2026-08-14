@@ -69,7 +69,16 @@ def get_all_users(
     result = controller.get_all_users(skip, limit)
     return {"message": "Liste des utilisateurs récupérée", "data": result}
 
-
+@router.put("/me", response_model=ApiResponse[UserRead])
+def update_self_profile(
+    user: UserUpdateSelf,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Modifier son propre profil. Accessible à tout utilisateur connecté."""
+    controller = UserController(db)
+    result = controller.update_user_self(current_user.id, user)
+    return {"message": "Profil mis à jour avec succès", "data": result}
 
 @router.put("/{user_id}", response_model=ApiResponse[UserRead])
 def update_user(
@@ -84,16 +93,7 @@ def update_user(
     return {"message": "Utilisateur modifié avec succès", "data": result}
 
 
-@router.put("/me", response_model=ApiResponse[UserRead])
-def update_self_profile(
-    user: UserUpdateSelf,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Modifier son propre profil. Accessible à tout utilisateur connecté."""
-    controller = UserController(db)
-    result = controller.update_user_self(current_user.id, user)
-    return {"message": "Profil mis à jour avec succès", "data": result}
+
 
 
 @router.put("/me/password", response_model=ApiResponse[UserRead])

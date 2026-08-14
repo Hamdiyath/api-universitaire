@@ -1,4 +1,3 @@
-
 # routes/notes.py - Routes pour la gestion des notes
 
 

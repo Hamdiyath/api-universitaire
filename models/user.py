@@ -1,6 +1,6 @@
-# ============================================================
+
 # models/user.py - Modèle User
-# ============================================================
+
 
 from sqlalchemy import Column, Integer, String, Date, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship

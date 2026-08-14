@@ -1,6 +1,4 @@
-# ============================================================
-# crud/enseignement.py - Opérations CRUD pour la table Enseignement
-# ============================================================
+# crud/enseignement.py - Opérations CRUD pour la table Enseignemen
 
 from typing import Optional, List
 from sqlalchemy.orm import Session

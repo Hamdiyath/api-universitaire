@@ -1,6 +1,5 @@
-# ============================================================
+
 # routes/enseignements.py - Routes pour les enseignements
-# ============================================================
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
@@ -44,7 +43,7 @@ def get_enseignements_by_professeur_route(
     - Admin peut voir tous les enseignements
     """
     controller = EnseignementController(db)
-    result = controller.get_enseignements_by_professeur(professeur_id, current_user)
+    result = controller.get_enseignements_by_professeur(professeur_id,current_user )
     return ApiResponse(success=True, message="Enseignements récupérés avec succès", data=result)
 
 

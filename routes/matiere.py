@@ -1,6 +1,6 @@
-# ============================================================
+
 # routes/matiere.py - Routes pour les matières
-# ============================================================
+
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
@@ -9,6 +9,8 @@ from database import get_db
 from schemas.matiere import MatiereCreate, MatiereUpdate, MatiereRead
 from controllers.matiere import MatiereController
 from schemas.response import ApiResponse
+from models.user import User
+from core.dependencies import require_role , get_current_user
 
 router = APIRouter(prefix="/matieres", tags=["Matieres"])
 
@@ -17,7 +19,8 @@ router = APIRouter(prefix="/matieres", tags=["Matieres"])
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=ApiResponse[MatiereRead])
 def create_new_matiere(
     matiere_data: MatiereCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["admin"]))
 ):
     """Créer une nouvelle matière."""
     controller = MatiereController(db)
@@ -30,7 +33,8 @@ def create_new_matiere(
 def get_all_matieres(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["admin"]))
 ):
     """Récupérer toutes les matières (paginé)."""
     controller = MatiereController(db)
@@ -42,7 +46,8 @@ def get_all_matieres(
 @router.get("/{matiere_id}", response_model=ApiResponse[MatiereRead])
 def get_matiere_by_id_route(
     matiere_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["admin"]))
 ):
     """Récupérer une matière par son ID."""
     controller = MatiereController(db)
@@ -55,7 +60,8 @@ def get_matiere_by_id_route(
 def update_existing_matiere(
     matiere_id: int,
     matiere_data: MatiereUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["admin"]))
 ):
     """Modifier une matière existante."""
     controller = MatiereController(db)
@@ -67,7 +73,8 @@ def update_existing_matiere(
 @router.delete("/{matiere_id}", response_model=ApiResponse[None])
 def delete_existing_matiere(
     matiere_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["admin"]))
 ):
     """Supprimer une matière."""
     controller = MatiereController(db)

@@ -1,10 +1,11 @@
-# ============================================================
+from tkinter.constants import CASCADE
+
 # models/enseignement.py - Modèle Enseignement
-# ============================================================
+
 # Table de liaison entre les professeurs et les matières qu'ils enseignent.
 # Un professeur peut enseigner plusieurs matières.
 # Une matière peut être enseignée par plusieurs professeurs.
-# ============================================================
+
 
 from sqlalchemy import Column, Integer, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -18,7 +19,7 @@ class Enseignement(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # Clés étrangères (sans primary_key=True)
-    professeur_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    professeur_id = Column(Integer, ForeignKey("users.id", ondelete=CASCADE), nullable=False)
     matiere_id = Column(Integer, ForeignKey("matieres.id"), nullable=False)
     semestre = Column(String(20), nullable=False)
     annee_universitaire = Column(String(20), nullable=False)

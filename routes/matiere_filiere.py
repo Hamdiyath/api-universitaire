@@ -1,6 +1,5 @@
-# ============================================================
 # routes/matieres_filieres.py - Routes pour les associations Matière-Filière
-# ============================================================
+
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
