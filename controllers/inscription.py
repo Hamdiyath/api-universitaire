@@ -18,8 +18,8 @@ class InscriptionController:
     def get_inscription_by_id(self, inscription_id):
         return self.service.get_inscription_by_id(inscription_id)
 
-    def get_inscriptions_by_etudiant(self, etudiant_id):
-        return self.service.get_inscriptions_by_etudiant(etudiant_id)
+    def get_inscriptions_by_etudiant(self, etudiant_id, current_user):
+        return self.service.get_inscriptions_by_etudiant(etudiant_id, current_user)
 
     def get_inscriptions_by_matiere(self, matiere_id):
         return self.service.get_inscriptions_by_matiere(matiere_id)

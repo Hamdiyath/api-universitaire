@@ -1,4 +1,4 @@
-from tkinter.constants import CASCADE
+
 
 # models/enseignement.py - Modèle Enseignement
 
@@ -19,7 +19,7 @@ class Enseignement(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # Clés étrangères (sans primary_key=True)
-    professeur_id = Column(Integer, ForeignKey("users.id", ondelete=CASCADE), nullable=False)
+    professeur_id = Column(Integer, ForeignKey("users.id",  ondelete="CASCADE"), nullable=False)
     matiere_id = Column(Integer, ForeignKey("matieres.id"), nullable=False)
     semestre = Column(String(20), nullable=False)
     annee_universitaire = Column(String(20), nullable=False)
