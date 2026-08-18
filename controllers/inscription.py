@@ -1,32 +1,35 @@
-# ============================================================
-# controllers/inscription_controller.py - Pure Passerelle
-# ============================================================
-
-from sqlalchemy.orm import Session
-from schemas.inscription import InscriptionCreate
+# controllers/inscription.py - Contrôleur des inscriptions
 from services.inscription_service import InscriptionService
 
+
 class InscriptionController:
-    def __init__(self, db: Session):
-        # Le contrôleur instancie le service en lui injectant la session de BDD
-        self.inscription_service = InscriptionService(db)
+    """
+    Contrôleur pour les actions liées aux inscriptions.
+    Fait le lien entre la route et le service.
+    Ne contient aucune logique métier.
+    """
+    def __init__(self, db):
+        self.db = db
+        self.service = InscriptionService(db)
 
-    def inscrire_etudiant(self, inscription_data: InscriptionCreate):
-        """Transmet l'action d'inscription au service."""
-        return self.inscription_service.inscrire_etudiant(inscription_data)
+    def inscrire_etudiant(self, inscription_data):
+        return self.service.inscrire_etudiant(inscription_data)
 
-    def get_inscriptions_by_etudiant(self, etudiant_id: int):
-        """Transmet la récupération des inscriptions d'un étudiant au service."""
-        return self.inscription_service.get_inscriptions_by_etudiant(etudiant_id)
+    def get_inscription_by_id(self, inscription_id):
+        return self.service.get_inscription_by_id(inscription_id)
 
-    def get_inscriptions_by_matiere(self, matiere_id: int):
-        """Transmet la récupération des inscriptions d'une matière au service."""
-        return self.inscription_service.get_inscriptions_by_matiere(matiere_id)
+    def get_inscriptions_by_etudiant(self, etudiant_id):
+        return self.service.get_inscriptions_by_etudiant(etudiant_id)
 
-    def get_all_inscriptions(self, skip: int, limit: int):
-        """Transmet la récupération globale et paginée des inscriptions au service."""
-        return self.inscription_service.get_all_inscriptions(skip, limit)
+    def get_inscriptions_by_matiere(self, matiere_id):
+        return self.service.get_inscriptions_by_matiere(matiere_id)
 
-    def supprimer_inscription(self, etudiant_id: int, matiere_id: int, semestre: str):
-        """Transmet la suppression d'une inscription au service."""
-        return self.inscription_service.supprimer_inscription(etudiant_id, matiere_id, semestre)
+    def get_all_inscriptions(self, skip=0, limit=100):
+        return self.service.get_all_inscriptions(skip, limit)
+
+    def update_inscription(self, inscription_id, update_data):
+        return self.service.update_inscription(inscription_id, update_data)
+
+    def supprimer_inscription(self, inscription_id):
+        return self.service.supprimer_inscription(inscription_id)
+

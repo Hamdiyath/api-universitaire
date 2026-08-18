@@ -1,6 +1,6 @@
-# ============================================================
+
 # services/auth_service.py - Logique métier Authentification
-# ============================================================
+
 
 from sqlalchemy.orm import Session
 import secrets

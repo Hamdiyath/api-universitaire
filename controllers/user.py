@@ -1,6 +1,6 @@
-# ============================================================
+
 # controllers/user.py - Contrôleur des utilisateurs
-# ============================================================
+
 
 from services.user_service import  UserService
 
@@ -20,9 +20,9 @@ class UserController:
 
 
 
-    def create_user_account(self, user_data):
+    def create_user_account(self, user_data , background_tasks):
         """Crée un nouvel utilisateur."""
-        return self.service.create_user_account( user_data)
+        return self.service.create_user_account( user_data, background_tasks)
 
 
 

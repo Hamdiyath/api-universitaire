@@ -1,6 +1,6 @@
 
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -23,10 +23,10 @@ router = APIRouter(prefix="/users", tags=["Utilisateurs"])
 
 
 @router.post("/",response_model=ApiResponse[UserReadAdmin])
-def create_user_account(user: UserCreate,db: Session = Depends(get_db),_: User = Depends(require_role(["admin", "scolarite"]))):
+def create_user_account(user: UserCreate,background_tasks: BackgroundTasks,db: Session = Depends(get_db),current_user: User = Depends(require_role(["admin", "scolarite"]))):
     """Créer un utilisateur. Réservé à l'admin et à la scolarité."""
     controller = UserController(db)
-    result = controller.create_user_account(user)
+    result = controller.create_user_account(user, background_tasks)
     return {"message": "Compte utilisateur créé avec succès", "data": result}
 
 
@@ -46,7 +46,7 @@ def get_self_profile(
 def get_user_by_id(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(can_view_user_profile)
+    current_user: User = Depends(can_view_user_profile)
 ):
     """
     Voir un utilisateur par son ID.
@@ -62,7 +62,7 @@ def get_all_users(
     db: Session = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
-    _: User = Depends(require_role(["admin", "scolarite"]))
+    current_user: User = Depends(require_role(["admin", "scolarite"]))
 ):
     """Lister tous les utilisateurs. Réservé à l'admin et à la scolarité."""
     controller = UserController(db)
@@ -85,7 +85,7 @@ def update_user(
     user_id: int,
     user: UserUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(["admin", "scolarite"]))
+    current_user: User = Depends(require_role(["admin", "scolarite"]))
 ):
     """Modifier un utilisateur. Réservé à l'admin et à la scolarité."""
     controller = UserController(db)
@@ -112,7 +112,7 @@ def update_password(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(["admin"]))
+    current_user: User = Depends(require_role(["admin"]))
 ):
     """Supprimer un utilisateur. Réservé à l'admin."""
     controller = UserController(db)
@@ -125,7 +125,7 @@ def delete_user(
 def renvoyer_token_activation(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(["admin", "scolarite"]))
+    current_user: User = Depends(require_role(["admin", "scolarite"]))
 ):
     """Renvoyer un token d'activation. Réservé à l'admin et à la scolarité."""
     controller = UserController(db)

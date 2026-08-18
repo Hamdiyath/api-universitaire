@@ -10,3 +10,12 @@ class SessionNote(str, enum.Enum):
     NORMALE = "normale"
     RATTRAPAGE = "rattrapage"
     REPRISE = "reprise"
+
+
+
+class TypeInscription(str, enum.Enum):
+    """Types d'inscription d'un étudiant à une matière."""
+    NORMALE = "normale"
+    REDOUBLEMENT = "redoublement"
+    ENJAMBEMENT = "enjambement"
+    OPTIONNEL = "optionnel"

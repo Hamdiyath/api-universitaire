@@ -114,6 +114,13 @@ class InscriptionAlreadyExistsError(AppError):
         super().__init__("Cet étudiant est déjà inscrit à cette matière")
 
 
+class InscriptionModificationBlockedError(AppError):
+    """Levée quand on tente de modifier une inscription alors que des notes y sont déjà rattachées."""
+    def __init__(self, message: str = "Impossible de modifier cette inscription : des notes ont déjà été saisies pour cette matière"):
+        self.message = message
+        super().__init__(self.message)
+
+
 # ---------- Semestres ----------
 class SemestreNotFoundError(AppError):
     """Levée quand un semestre n'existe pas."""
@@ -209,6 +216,6 @@ class MatiereAlreadyExistsError(AppError):
 
 class FiliereAlreadyExistsError(AppError):
     """Levée quand une filière avec ce nom existe déjà."""
-    def __init__(self, nom: str):
+    def __init__(self, nom: str ):
         self.message = f"Une filière avec le nom '{nom}' existe déjà"
         super().__init__(self.message)

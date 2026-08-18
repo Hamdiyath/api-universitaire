@@ -25,6 +25,7 @@ from exceptions.base import (
     InvalidPasswordError,
     FiliereRequiredError,
     PermissionDeniedError,
+    InscriptionModificationBlockedError
 )
 
 
@@ -70,9 +71,15 @@ def setup_exception_handlers(app: FastAPI):
             status_code = 400
             error_code = "BAD_REQUEST"
 
+        elif isinstance(exc, (AccountAlreadyActiveError, InvalidPasswordError, FiliereRequiredError,
+                              InscriptionModificationBlockedError)):
+            status_code = 400
+            error_code = "BAD_REQUEST"
+
         elif isinstance(exc, (NoteModificationDeniedError, NoteModificationDelayError, PermissionDeniedError)):
             status_code = 403
             error_code = "FORBIDDEN"
+
 
         return JSONResponse(
             status_code=status_code,

@@ -28,9 +28,9 @@ from exceptions.base import (
 SEUIL_VALIDATION = 12
 
 
-# ============================================================
+
 # FONCTION DE CALCUL PUR (ne touche pas à la base de données)
-# ============================================================
+
 
 def get_meilleure_note(notes: List[Dict]) -> Optional[float]:
     """
@@ -49,9 +49,9 @@ class BulletinService:
     def __init__(self, db: Session):
         self.db = db
 
-    # ============================================================
+
     # FONCTIONS DE CALCUL
-    # ============================================================
+
 
     def calculer_moyenne_matiere(self, etudiant_id: int, matiere_id: int) -> Dict[str, Any]:
         """
@@ -233,9 +233,9 @@ class BulletinService:
             "credits_total": credits_total
         }
 
-    # ============================================================
+
     # FONCTIONS DE GÉNÉRATION DE BULLETIN
-    # ============================================================
+
 
 
 
