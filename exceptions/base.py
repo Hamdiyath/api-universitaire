@@ -219,3 +219,26 @@ class FiliereAlreadyExistsError(AppError):
     def __init__(self, nom: str ):
         self.message = f"Une filière avec le nom '{nom}' existe déjà"
         super().__init__(self.message)
+
+
+
+# ---------- Résultats Matières ----------
+class ResultatMatiereNotFoundError(AppError):
+    """Levée quand une ligne de résultat matière n'est pas trouvée."""
+    def __init__(self, message: str = "Résultat de matière non trouvé"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class DecisionAnnuelleAlreadyExistsError(AppError):
+    """Levée quand une décision annuelle existe déjà pour cet étudiant et cette année."""
+    def __init__(self, message: str = "Une décision de passage existe déjà pour cet étudiant pour cette année"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class DecisionAnnuelleNotFoundError(AppError):
+    """Levée quand une décision annuelle n'est pas trouvée."""
+    def __init__(self, message: str = "Décision annuelle non trouvée"):
+        self.message = message
+        super().__init__(self.message)

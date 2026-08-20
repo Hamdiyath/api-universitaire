@@ -1,11 +1,7 @@
-# ============================================================
 # scripts/seed_admin.py - Script de création des rôles et du compte admin
-# ============================================================
-# Ce script est exécuté automatiquement au démarrage de l'API.
+# Ce script est exécuté automatiquement au démarrage de l'API
 # Il crée les rôles par défaut (admin, scolarite, etudiant, professeur)
 # s'ils n'existent pas, puis crée le compte admin.
-# ============================================================
-
 import os
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func

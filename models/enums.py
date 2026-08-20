@@ -19,3 +19,9 @@ class TypeInscription(str, enum.Enum):
     REDOUBLEMENT = "redoublement"
     ENJAMBEMENT = "enjambement"
     OPTIONNEL = "optionnel"
+
+class StatutValidation(str, enum.Enum):
+    """Statut de validation d'un étudiant pour une matière donnée."""
+    NON_NOTE = "non_note"
+    VALIDE = "valide"
+    NON_VALIDE = "non_valide"

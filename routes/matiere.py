@@ -16,7 +16,7 @@ router = APIRouter(prefix="/matieres", tags=["Matieres"])
 
 
 # ---------- Créer une matière ----------
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=ApiResponse[MatiereRead])
+@router.post("/",  response_model=ApiResponse[MatiereRead])
 def create_new_matiere(
     matiere_data: MatiereCreate,
     db: Session = Depends(get_db),

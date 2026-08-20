@@ -1,7 +1,4 @@
-
 # models/user.py - Modèle User
-
-
 from sqlalchemy import Column, Integer, String, Date, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -10,7 +7,6 @@ from database import Base
 
 class User(Base):
     __tablename__ = "users"
-
     # ---------- Identifiant ----------
     id = Column(Integer, primary_key=True, index=True)
 
@@ -28,8 +24,8 @@ class User(Base):
 
     # ---------- Champs spécifiques selon le rôle ----------
     matricule = Column(String(50), unique=True, nullable=True)  # Étudiant
-    specialite = Column(String(255), nullable=True)             # Professeur
-
+    specialite = Column(String(255), nullable=True)
+    # Professeur
     # ---------- Statut du compte ----------
     statut = Column(String(20), default="actif", nullable=False)
 
@@ -43,10 +39,11 @@ class User(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # ---------- Relations ----------
-    # Rôles de l'utilisateur (relation many-to-many via user_role)
     roles = relationship("Role", secondary="user_role", back_populates="users")
-
     # Filière de l'utilisateur (uniquement pour les étudiants)
-    # NULL pour les admins, professeurs et scolarité
     filiere_id = Column(Integer, ForeignKey("filieres.id"), nullable=True)
     filiere = relationship("Filiere", back_populates="etudiants")
+    # Niveau académique actuel de l'étudiant (L1, L2, L3...).
+    # NULL pour les admins, professeurs et scolarité.
+    # Mis à jour uniquement lors d'une décision de passage (PASSE/ENJAMBEMENT).
+    niveau_actuel = Column(String(10), nullable=True)

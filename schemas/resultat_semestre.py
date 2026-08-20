@@ -1,6 +1,6 @@
-# ============================================================
+
 # schemas/resultat_semestre.py - Schémas Pydantic pour ResultatSemestre
-# ============================================================
+
 
 from pydantic import BaseModel, Field
 from typing import Optional

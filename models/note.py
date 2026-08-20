@@ -3,7 +3,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float, Enum
 from sqlalchemy.sql import func
 from database import Base
-from models.enums import SessionNote
+from models.enums import SessionNote, StatutValidation
 
 
 class Note(Base):

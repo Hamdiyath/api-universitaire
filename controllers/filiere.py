@@ -1,6 +1,6 @@
-# ============================================================
+
 # controllers/filiere.py - Contrôleur des filières
-# ============================================================
+
 from services.filiere_service import FiliereService
 
 

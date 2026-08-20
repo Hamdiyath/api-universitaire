@@ -12,6 +12,7 @@ from crud.matiere import get_by_id as get_matiere_by_id
 from crud.matiere_filiere import get_by_matiere as get_filieres_by_matiere
 from crud.enseignement import get_by_professeur as get_enseignements_prof, get_by_professeur_and_matiere
 from schemas.note import NoteCreate, NoteUpdate, NoteRead
+from services.bulletin_service import BulletinService
 
 from exceptions.base import (
     UserNotFoundError,
@@ -120,6 +121,13 @@ class NoteService:
         note_dict = note_data.model_dump()
         note_dict["professeur_id"] = professeur_id
         new_note = create(self.db, note_dict)
+
+        # Synchroniser la ligne de résultat correspondante
+        BulletinService(self.db).synchroniser_resultat_matiere(
+            note_data.etudiant_id, note_data.matiere_id,
+            note_data.semestre, note_data.annee_universitaire
+        )
+
         return NoteRead.model_validate(new_note)
 
     def get_notes_by_etudiant(self, etudiant_id: int, current_user, skip: int = 0, limit: int = 100) -> List[NoteRead]:
@@ -139,12 +147,12 @@ class NoteService:
         return [NoteRead.model_validate(note) for note in notes]
 
     def get_notes_by_matiere(
-        self,
-        matiere_id: int,
-        current_user,
-        filiere_id: Optional[int] = None,
-        skip: int = 0,
-        limit: int = 100
+            self,
+            matiere_id: int,
+            current_user,
+            filiere_id: Optional[int] = None,
+            skip: int = 0,
+            limit: int = 100
     ) -> List[NoteRead]:
         if not self._can_view_matiere_notes(current_user, matiere_id):
             raise PermissionDeniedError("Vous n'avez pas l'autorisation de voir les notes de cette matière")
@@ -186,21 +194,40 @@ class NoteService:
             raise NoteNotFoundError(note_id)
 
         if not self._can_modify_note(current_user, note_id):
-            # Distinguer refus pur / délai dépassé, comme avant
             if note.professeur_id == current_user.id and note.date_saisie and \
-               (datetime.now(timezone.utc) - note.date_saisie).days > 7:
+                    (datetime.now(timezone.utc) - note.date_saisie).days > 7:
                 raise NoteModificationDelayError()
             raise NoteModificationDeniedError()
 
         update_data = note_data.model_dump(exclude_unset=True)
         updated_note = update(self.db, note_id, update_data)
+
+        # Synchroniser avec les valeurs finales réelles de la note après mise à jour
+        # (etudiant_id/matiere_id sont immuables, semestre/annee peuvent avoir changé)
+        BulletinService(self.db).synchroniser_resultat_matiere(
+            updated_note.etudiant_id, updated_note.matiere_id,
+            updated_note.semestre, updated_note.annee_universitaire
+        )
+
         return NoteRead.model_validate(updated_note)
 
     def delete_note(self, note_id: int) -> None:
         existing_note = get_by_id(self.db, note_id)
         if not existing_note:
             raise NoteNotFoundError(note_id)
+
+        # Capturer les infos avant suppression, pour synchroniser après
+        etudiant_id = existing_note.etudiant_id
+        matiere_id = existing_note.matiere_id
+        semestre = existing_note.semestre
+        annee_universitaire = existing_note.annee_universitaire
+
         delete(self.db, note_id)
+
+        # Recalculer maintenant que cette note n'existe plus
+        BulletinService(self.db).synchroniser_resultat_matiere(
+            etudiant_id, matiere_id, semestre, annee_universitaire
+        )
 
     def get_notes_by_professeur(self, professeur_id: int, current_user, skip: int = 0, limit: int = 100) -> List[NoteRead]:
         user_roles = [role.name for role in current_user.roles]

@@ -16,7 +16,7 @@ router = APIRouter(prefix="/notes", tags=["Notes"])
 
 # ---------- 1. Créer une note ----------
 # Permission : Professeur, Admin, Scolarité
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=ApiResponse[NoteRead])
+@router.post("/", response_model=ApiResponse[NoteRead])
 def create_new_note(
     note_data: NoteCreate,
     db: Session = Depends(get_db),

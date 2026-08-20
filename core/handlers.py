@@ -25,7 +25,9 @@ from exceptions.base import (
     InvalidPasswordError,
     FiliereRequiredError,
     PermissionDeniedError,
-    InscriptionModificationBlockedError
+    InscriptionModificationBlockedError,
+    ResultatMatiereNotFoundError
+
 )
 
 
@@ -45,7 +47,8 @@ def setup_exception_handlers(app: FastAPI):
             NoteNotFoundError,
             EnseignementNotFoundError,
             SemestreNotFoundError,
-            MatiereFiliereNotFoundError
+            MatiereFiliereNotFoundError,
+            ResultatMatiereNotFoundError
         )):
             status_code = 404
             error_code = "NOT_FOUND"
@@ -61,7 +64,8 @@ def setup_exception_handlers(app: FastAPI):
             EnseignementAlreadyExistsError,
             InscriptionAlreadyExistsError,
             MatiereFiliereAlreadyExistsError,
-            MatiereFiliereAlreadyExistsError
+            MatiereFiliereAlreadyExistsError,
+
         )):
             status_code = 409
             error_code = "CONFLICT"

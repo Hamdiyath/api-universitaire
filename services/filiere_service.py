@@ -1,6 +1,6 @@
-# ============================================================
+
 # services/filiere_service.py - Logique métier pour Filiere
-# ============================================================
+
 
 from sqlalchemy.orm import Session
 from crud.filiere import get_by_nom, get_by_id, create, update, delete

@@ -22,6 +22,8 @@ from exceptions.base import (
     MatiereNotFoundError,
     FiliereRequiredError,
     PermissionDeniedError,
+    DecisionAnnuelleAlreadyExistsError,
+    DecisionAnnuelleNotFoundError
 )
 
 # ---------- Constante pour le seuil de validation ----------
@@ -478,3 +480,203 @@ class BulletinService:
         from crud.resultat_semestre import get_by_etudiant
         resultats = get_by_etudiant(self.db, etudiant_id)
         return [ResultatSemestreRead.model_validate(r) for r in resultats]
+
+
+
+
+
+    # ---------- Synchronisation avec ResultatMatiere ----------
+    def synchroniser_resultat_matiere(
+        self,
+        etudiant_id: int,
+        matiere_id: int,
+        semestre: str,
+        annee_universitaire: str
+    ) -> None:
+        """
+        Recalcule la moyenne et le statut d'un étudiant pour une matière,
+        et met à jour (ou crée) la ligne correspondante dans ResultatMatiere.
+        Appelée après chaque création, modification ou suppression de note.
+        """
+        import crud.resultat_matiere as resultat_crud
+        from models.enums import StatutValidation
+
+        resultat_calcul = self.calculer_moyenne_matiere(etudiant_id, matiere_id)
+
+        # Traduire le statut textuel du calcul en enum StatutValidation
+        if resultat_calcul["statut"] == "VALIDÉ":
+            statut = StatutValidation.VALIDE
+        elif resultat_calcul["statut"] == "NON VALIDE":
+            statut = StatutValidation.NON_VALIDE
+        else:
+            statut = StatutValidation.NON_NOTE
+
+        # Déterminer la session actuelle à partir des notes présentes
+        if "Reprise" in resultat_calcul.get("notes", {}):
+            session_actuelle = SessionNote.REPRISE
+        elif "Rattrapage" in resultat_calcul.get("notes", {}):
+            session_actuelle = SessionNote.RATTRAPAGE
+        else:
+            session_actuelle = SessionNote.NORMALE
+
+        update_data = {
+            "moyenne": resultat_calcul["moyenne"],
+            "statut": statut,
+            "session_actuelle": session_actuelle,
+        }
+
+        existing = resultat_crud.get_by_etudiant_matiere_semestre_annee(
+            self.db, etudiant_id, matiere_id, semestre, annee_universitaire
+        )
+
+        if existing:
+            resultat_crud.update(self.db, existing.id, update_data)
+        else:
+            resultat_crud.create(self.db, {
+                "etudiant_id": etudiant_id,
+                "matiere_id": matiere_id,
+                "semestre": semestre,
+                "annee_universitaire": annee_universitaire,
+                **update_data
+            })
+
+
+
+    # ---------- Génération des dettes pour l'année suivante ----------
+    def generer_dettes_annee_suivante(
+        self,
+        semestre: str,
+        annee_universitaire: str,
+        nouvelle_annee_universitaire: str
+    ) -> Dict[str, Any]:
+        """
+        Parcourt toutes les lignes ResultatMatiere en dette (NON_VALIDE ou
+        NON_NOTE) pour un semestre/année donné, et génère pour chacune une
+        nouvelle ligne en session REPRISE pour l'année universitaire suivante.
+        Idempotent : ne recrée pas une ligne déjà existante.
+        Réservé à l'Admin et à la Scolarité (clôture d'année).
+        """
+        import crud.resultat_matiere as resultat_crud
+        from models.enums import StatutValidation
+
+        dettes = resultat_crud.get_dettes_by_semestre_annee(self.db, semestre, annee_universitaire)
+
+        lignes_creees = []
+        lignes_ignorees = 0
+
+        for dette in dettes:
+            existing = resultat_crud.get_by_etudiant_matiere_semestre_annee(
+                self.db,
+                dette.etudiant_id,
+                dette.matiere_id,
+                semestre,
+                nouvelle_annee_universitaire
+            )
+            if existing:
+                lignes_ignorees += 1
+                continue
+
+            nouvelle_ligne = resultat_crud.create(self.db, {
+                "etudiant_id": dette.etudiant_id,
+                "matiere_id": dette.matiere_id,
+                "semestre": semestre,
+                "annee_universitaire": nouvelle_annee_universitaire,
+                "session_actuelle": SessionNote.REPRISE,
+                "statut": StatutValidation.NON_NOTE,
+                "moyenne": None
+            })
+            lignes_creees.append(nouvelle_ligne)
+
+        return {
+            "semestre": semestre,
+            "annee_precedente": annee_universitaire,
+            "nouvelle_annee": nouvelle_annee_universitaire,
+            "total_dettes_trouvees": len(dettes),
+            "lignes_creees": len(lignes_creees),
+            "lignes_deja_existantes": lignes_ignorees
+        }
+
+
+
+
+    # ---------- Calcul des crédits validés sur l'année (S1+S2) ----------
+    def calculer_credits_valides_annee(self, etudiant_id: int, annee_universitaire: str) -> Dict[str, Any]:
+        """
+        Calcule le total de crédits validés (moyenne >= 12) pour un étudiant,
+        en agrégeant les deux semestres de l'année universitaire donnée.
+        """
+        import crud.resultat_matiere as resultat_crud
+        from models.enums import StatutValidation
+
+        resultats_annee = []
+        for semestre_num in self._semestres_de_lannee(etudiant_id):
+            resultats_annee.extend(
+                resultat_crud.get_by_etudiant_semestre_annee(
+                    self.db, etudiant_id, semestre_num, annee_universitaire
+                )
+            )
+
+        credits_valides = 0
+        credits_total = 0
+        for r in resultats_annee:
+            matiere = get_matiere_by_id(self.db, r.matiere_id)
+            if not matiere:
+                continue
+            credits_total += matiere.credits
+            if r.statut == StatutValidation.VALIDE:
+                credits_valides += matiere.credits
+
+        return {
+            "etudiant_id": etudiant_id,
+            "annee_universitaire": annee_universitaire,
+            "credits_valides": credits_valides,
+            "credits_total": credits_total
+        }
+
+    def _semestres_de_lannee(self, etudiant_id: int) -> List[str]:
+        """
+        Détermine les deux semestres de l'année en cours pour un étudiant,
+        selon son niveau (déduit de sa filière). À adapter selon la
+        structure exacte de tes filières (S1/S2, S3/S4, S5/S6).
+        """
+        # Implémentation à préciser selon comment le niveau est stocké
+        # sur Filiere ou déduit autrement dans ton modèle actuel.
+        raise NotImplementedError("À implémenter selon la structure de Filiere")
+
+
+
+
+    def generer_decision_annuelle(self, etudiant_id: int, annee_universitaire: str) -> DecisionAnnuelleRead:
+        """
+        Calcule et enregistre la décision de passage pour un étudiant.
+        N'écrase jamais une décision existante : lève une erreur si déjà présente.
+        """
+        import crud.decision_annuelle as decision_crud
+
+        etudiant = get_user_by_id(self.db, etudiant_id)
+        if not etudiant:
+            raise UserNotFoundError(etudiant_id)
+
+        existing = decision_crud.get_by_etudiant_annee(self.db, etudiant_id, annee_universitaire)
+        if existing:
+            raise DecisionAnnuelleAlreadyExistsError()
+
+        credits_info = self.calculer_credits_valides_annee(etudiant_id, annee_universitaire)
+        credits_valides = credits_info["credits_valides"]
+
+        if credits_valides == 60:
+            decision = DecisionPassage.PASSE
+        elif credits_valides >= 42:
+            decision = DecisionPassage.ENJAMBEMENT
+        else:
+            decision = DecisionPassage.REDOUBLEMENT
+
+        nouvelle_decision = decision_crud.create(self.db, {
+            "etudiant_id": etudiant_id,
+            "annee_universitaire": annee_universitaire,
+            "credits_valides": credits_valides,
+            "credits_total": 60,
+            "decision": decision
+        })
+
+        return DecisionAnnuelleRead.model_validate(nouvelle_decision)
