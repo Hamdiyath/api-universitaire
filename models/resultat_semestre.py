@@ -1,6 +1,5 @@
-# ============================================================
+
 # models/resultat_semestre.py - Modèle ResultatSemestre
-# ============================================================
 
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
 from sqlalchemy.sql import func

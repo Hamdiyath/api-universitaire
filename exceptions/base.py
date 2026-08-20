@@ -242,3 +242,18 @@ class DecisionAnnuelleNotFoundError(AppError):
     def __init__(self, message: str = "Décision annuelle non trouvée"):
         self.message = message
         super().__init__(self.message)
+
+
+
+class NiveauRequiredError(AppError):
+    """Levée quand un étudiant n'a pas de niveau académique renseigné."""
+    def __init__(self, message: str = "L'étudiant n'a pas de niveau académique renseigné"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class NiveauInvalideError(AppError):
+    """Levée quand le niveau académique d'un étudiant ne correspond à aucun semestre connu."""
+    def __init__(self, niveau: str):
+        self.message = f"Niveau académique invalide : '{niveau}'"
+        super().__init__(self.message)

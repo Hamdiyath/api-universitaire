@@ -29,3 +29,11 @@ class ResultatMatiereController:
 
     def supprimer_resultat(self, resultat_id):
         return self.service.supprimer_resultat(resultat_id)
+
+
+
+    def generer_dettes_annee_suivante(self, semestre, annee_universitaire, nouvelle_annee_universitaire):
+        from services.bulletin_service import BulletinService
+        return BulletinService(self.db).generer_dettes_annee_suivante(
+            semestre, annee_universitaire, nouvelle_annee_universitaire
+        )

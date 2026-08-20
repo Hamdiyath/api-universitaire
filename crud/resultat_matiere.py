@@ -118,3 +118,8 @@ def delete(db: Session, resultat_id: int) -> None:
     db.delete(resultat)
     db.commit()
     return None
+
+
+
+
+

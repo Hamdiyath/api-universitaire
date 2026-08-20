@@ -13,6 +13,7 @@ from core.handlers import setup_exception_handlers
 from routes import matiere_filiere as matieres_filieres_router
 from routes import inscription as inscriptions_router
 from routes import  resultat_matiere as resultat_matieres_router
+from routes import decision_annuelle as decisions_annuelles_router
 
 
 @asynccontextmanager
@@ -45,6 +46,7 @@ app.include_router(matieres_filieres_router.router)
 app.include_router(inscriptions_router.router)
 
 app.include_router(resultat_matieres_router.router)
+app.include_router(decisions_annuelles_router.router)
 
 
 

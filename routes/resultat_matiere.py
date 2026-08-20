@@ -113,3 +113,25 @@ def delete_resultat_route(
     controller = ResultatMatiereController(db)
     controller.supprimer_resultat(resultat_id)
     return ApiResponse(success=True, message="Résultat supprimé avec succès", data=None)
+
+
+
+# ---------- 7. Générer les dettes pour l'année suivante ----------
+# Permission : Admin, Scolarité
+@router.post("/generer-dettes", response_model=ApiResponse[dict])
+def generer_dettes_annee_suivante_route(
+    semestre: str,
+    annee_universitaire: str,
+    nouvelle_annee_universitaire: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["admin", "scolarite"]))
+):
+    """
+    Parcourt les lignes en dette (NON_VALIDE ou NON_NOTE) pour un
+    semestre/année donné, et génère les lignes de reprise correspondantes
+    pour l'année universitaire suivante. Idempotent.
+    Réservé à l'Admin et à la Scolarité.
+    """
+    controller = ResultatMatiereController(db)
+    result = controller.generer_dettes_annee_suivante(semestre, annee_universitaire, nouvelle_annee_universitaire)
+    return ApiResponse(success=True, message="Dettes générées avec succès", data=result)

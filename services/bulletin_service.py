@@ -15,6 +15,8 @@ from crud.enseignement import get_by_professeur_and_matiere
 from crud.filiere import get_by_id as get_filiere_by_id
 from models.enums import SessionNote
 from schemas.resultat_semestre import ResultatSemestreCreate, ResultatSemestreRead
+from schemas.decision_annuelle import DecisionAnnuelleRead
+from models.decision_annuelle import DecisionPassage
 
 from exceptions.base import (
     UserNotFoundError,
@@ -596,23 +598,23 @@ class BulletinService:
             "lignes_deja_existantes": lignes_ignorees
         }
 
-
-
-
     # ---------- Calcul des crédits validés sur l'année (S1+S2) ----------
     def calculer_credits_valides_annee(self, etudiant_id: int, annee_universitaire: str) -> Dict[str, Any]:
         """
         Calcule le total de crédits validés (moyenne >= 12) pour un étudiant,
-        en agrégeant les deux semestres de l'année universitaire donnée.
+        en agrégeant les deux semestres de son niveau académique actuel,
+        pour l'année universitaire donnée.
         """
         import crud.resultat_matiere as resultat_crud
         from models.enums import StatutValidation
 
+        semestres = self._semestres_de_lannee(etudiant_id)
+
         resultats_annee = []
-        for semestre_num in self._semestres_de_lannee(etudiant_id):
+        for semestre in semestres:
             resultats_annee.extend(
                 resultat_crud.get_by_etudiant_semestre_annee(
-                    self.db, etudiant_id, semestre_num, annee_universitaire
+                    self.db, etudiant_id, semestre, annee_universitaire
                 )
             )
 
@@ -629,19 +631,10 @@ class BulletinService:
         return {
             "etudiant_id": etudiant_id,
             "annee_universitaire": annee_universitaire,
+            "semestres": semestres,
             "credits_valides": credits_valides,
             "credits_total": credits_total
         }
-
-    def _semestres_de_lannee(self, etudiant_id: int) -> List[str]:
-        """
-        Détermine les deux semestres de l'année en cours pour un étudiant,
-        selon son niveau (déduit de sa filière). À adapter selon la
-        structure exacte de tes filières (S1/S2, S3/S4, S5/S6).
-        """
-        # Implémentation à préciser selon comment le niveau est stocké
-        # sur Filiere ou déduit autrement dans ton modèle actuel.
-        raise NotImplementedError("À implémenter selon la structure de Filiere")
 
 
 
@@ -678,5 +671,50 @@ class BulletinService:
             "credits_total": 60,
             "decision": decision
         })
+
+        return DecisionAnnuelleRead.model_validate(nouvelle_decision)
+
+
+
+    def generer_decision_annuelle(self, etudiant_id: int, annee_universitaire: str) -> DecisionAnnuelleRead:
+        """
+        Calcule et enregistre la décision de passage pour un étudiant.
+        Met à jour son niveau académique en conséquence.
+        N'écrase jamais une décision existante : lève une erreur si déjà présente.
+        """
+        import crud.decision_annuelle as decision_crud
+        import crud.user as user_crud
+
+        etudiant = get_user_by_id(self.db, etudiant_id)
+        if not etudiant:
+            raise UserNotFoundError(etudiant_id)
+
+        existing = decision_crud.get_by_etudiant_annee(self.db, etudiant_id, annee_universitaire)
+        if existing:
+            raise DecisionAnnuelleAlreadyExistsError()
+
+        credits_info = self.calculer_credits_valides_annee(etudiant_id, annee_universitaire)
+        credits_valides = credits_info["credits_valides"]
+
+        if credits_valides == 60:
+            decision = DecisionPassage.PASSE
+        elif credits_valides >= 42:
+            decision = DecisionPassage.ENJAMBEMENT
+        else:
+            decision = DecisionPassage.REDOUBLEMENT
+
+        nouvelle_decision = decision_crud.create(self.db, {
+            "etudiant_id": etudiant_id,
+            "annee_universitaire": annee_universitaire,
+            "credits_valides": credits_valides,
+            "credits_total": 60,
+            "decision": decision
+        })
+
+        # Mise à jour du niveau académique si passage ou enjambement
+        if decision in (DecisionPassage.PASSE, DecisionPassage.ENJAMBEMENT):
+            niveau_suivant = self._NIVEAU_SUIVANT.get(etudiant.niveau_actuel)
+            if niveau_suivant:
+                user_crud.update(self.db, etudiant_id, {"niveau_actuel": niveau_suivant})
 
         return DecisionAnnuelleRead.model_validate(nouvelle_decision)

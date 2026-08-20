@@ -26,7 +26,9 @@ from exceptions.base import (
     FiliereRequiredError,
     PermissionDeniedError,
     InscriptionModificationBlockedError,
-    ResultatMatiereNotFoundError
+    ResultatMatiereNotFoundError,
+    NiveauInvalideError,
+    NiveauRequiredError
 
 )
 
@@ -71,7 +73,7 @@ def setup_exception_handlers(app: FastAPI):
             error_code = "CONFLICT"
 
         # ---------- 400 Bad Request (Règles métier) ----------
-        elif isinstance(exc, (AccountAlreadyActiveError, InvalidPasswordError, FiliereRequiredError)):
+        elif isinstance(exc, (AccountAlreadyActiveError, InvalidPasswordError, FiliereRequiredError , InscriptionModificationBlockedError, NiveauRequiredError, NiveauInvalideError)):
             status_code = 400
             error_code = "BAD_REQUEST"
 
