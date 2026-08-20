@@ -11,3 +11,4 @@ from .enseignement import Enseignement
 from .inscription import Inscription
 from .matiere_filiere import MatiereFiliere
 from .resultat_matiere import ResultatMatiere  # <-- AJOUTER CETTE LIGNE
+from .decision_annuelle import  DecisionAnnuelle
