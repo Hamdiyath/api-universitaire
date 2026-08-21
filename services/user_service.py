@@ -5,7 +5,6 @@
 import secrets
 from datetime import datetime, timezone, timedelta
 from typing import List
-from core.email import  send_email , build_activation_email
 from sqlalchemy.orm import Session
 from crud import user as user_crud
 from crud import filiere as filiere_crud
@@ -85,15 +84,6 @@ class UserService:
 
         # Créer l'utilisateur
         new_user = user_crud.create(self.db, user_dict)
-
-        # 🛠️ PLANIFICATION DE L'EMAIL EN ARRIÈRE-PLAN
-        html_content = build_activation_email(new_user.nom, new_user.prenom, new_user.activation_token)
-        background_tasks.add_task(
-            send_email,
-            to_email=new_user.email,
-            subject="Activation de votre compte universitaire",
-            html_content=html_content
-        )
 
         # Associer le rôle
         new_user.roles.append(role_obj)

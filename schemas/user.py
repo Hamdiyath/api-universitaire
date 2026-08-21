@@ -61,7 +61,7 @@ class UserRead(UserBase):
     created_at: datetime
     updated_at: datetime
     roles: Optional[List[str]] = []
-    niveau_actuel: str
+    niveau_actuel: Optional[str] = None
 
     class Config:
         from_attributes = True
