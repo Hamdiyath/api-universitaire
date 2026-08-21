@@ -101,24 +101,8 @@ class EnseignementAlreadyExistsError(AppError):
         super().__init__("Ce professeur est déjà assigné à cette matière")
 
 
-# ---------- Inscriptions ----------
-class InscriptionNotFoundError(AppError):
-    """Levée quand une inscription n'est pas trouvée."""
-    def __init__(self):
-        super().__init__("Inscription non trouvée")
 
 
-class InscriptionAlreadyExistsError(AppError):
-    """Levée quand un étudiant est déjà inscrit à une matière."""
-    def __init__(self):
-        super().__init__("Cet étudiant est déjà inscrit à cette matière")
-
-
-class InscriptionModificationBlockedError(AppError):
-    """Levée quand on tente de modifier une inscription alors que des notes y sont déjà rattachées."""
-    def __init__(self, message: str = "Impossible de modifier cette inscription : des notes ont déjà été saisies pour cette matière"):
-        self.message = message
-        super().__init__(self.message)
 
 
 # ---------- Semestres ----------

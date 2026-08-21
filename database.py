@@ -1,13 +1,11 @@
-# ============================================================
+
 # database.py - Connexion et gestion de la base de données
-# ============================================================
 # Ce fichier configure la connexion à la base de données via
 # SQLAlchemy. Il fournit :
 #   - Le moteur (engine) pour exécuter les requêtes
 #   - La session (SessionLocal) pour les transactions
 #   - La base déclarative (Base) pour définir les modèles
 #   - La dépendance get_db() pour l'injection dans FastAPI
-# ============================================================
 
 import logging
 from sqlalchemy import create_engine

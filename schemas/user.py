@@ -1,6 +1,8 @@
-# ============================================================
+
+
 # schemas/user.py - Schémas Pydantic pour User
-# ============================================================
+
+
 
 from pydantic import BaseModel, Field, EmailStr, field_validator
 from datetime import date, datetime
@@ -19,7 +21,7 @@ class UserBase(BaseModel):
     matricule: Optional[str] = Field(None, max_length=50)
     specialite: Optional[str] = Field(None, max_length=255)
     filiere_id: Optional[int] = None  # Optionnel dans la base, mais obligatoire pour les étudiants
-
+    niveau_actuel: str
 
 class UserCreate(BaseModel):
     """
@@ -36,6 +38,7 @@ class UserCreate(BaseModel):
     specialite: Optional[str] = Field(None, max_length=255)
     role_name: str = Field(..., min_length=2, max_length=50, description="Nom du rôle (ex: etudiant, professeur, admin, scolarite)")
     filiere_id: Optional[int] = None  # Optionnel dans le schéma, mais validation ci-dessous
+    niveau_actuel: Optional[str] = None
 
     # ---------- Validateur personnalisé ----------
     @field_validator('filiere_id')
@@ -58,6 +61,7 @@ class UserRead(UserBase):
     created_at: datetime
     updated_at: datetime
     roles: Optional[List[str]] = []
+    niveau_actuel: str
 
     class Config:
         from_attributes = True

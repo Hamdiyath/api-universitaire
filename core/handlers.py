@@ -17,7 +17,7 @@ from exceptions.base import (
     MatiereFiliereNotFoundError,
     EmailAlreadyExistsError,
     EnseignementAlreadyExistsError,
-    InscriptionAlreadyExistsError,
+
     MatiereFiliereAlreadyExistsError,
     NoteModificationDeniedError,
     NoteModificationDelayError,
@@ -25,7 +25,7 @@ from exceptions.base import (
     InvalidPasswordError,
     FiliereRequiredError,
     PermissionDeniedError,
-    InscriptionModificationBlockedError,
+
     ResultatMatiereNotFoundError,
     NiveauInvalideError,
     NiveauRequiredError
@@ -64,7 +64,7 @@ def setup_exception_handlers(app: FastAPI):
         elif isinstance(exc, (
             EmailAlreadyExistsError,
             EnseignementAlreadyExistsError,
-            InscriptionAlreadyExistsError,
+
             MatiereFiliereAlreadyExistsError,
             MatiereFiliereAlreadyExistsError,
 
@@ -73,12 +73,12 @@ def setup_exception_handlers(app: FastAPI):
             error_code = "CONFLICT"
 
         # ---------- 400 Bad Request (Règles métier) ----------
-        elif isinstance(exc, (AccountAlreadyActiveError, InvalidPasswordError, FiliereRequiredError , InscriptionModificationBlockedError, NiveauRequiredError, NiveauInvalideError)):
+        elif isinstance(exc, (AccountAlreadyActiveError, InvalidPasswordError, FiliereRequiredError , NiveauRequiredError, NiveauInvalideError)):
             status_code = 400
             error_code = "BAD_REQUEST"
 
-        elif isinstance(exc, (AccountAlreadyActiveError, InvalidPasswordError, FiliereRequiredError,
-                              InscriptionModificationBlockedError)):
+        elif isinstance(exc, (AccountAlreadyActiveError, InvalidPasswordError, FiliereRequiredError
+                             )):
             status_code = 400
             error_code = "BAD_REQUEST"
 

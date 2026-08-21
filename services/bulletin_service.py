@@ -13,6 +13,8 @@ from crud.resultat_semestre import get_by_etudiant_semestre, create as create_re
 from crud.matiere_filiere import get_by_filiere as get_matieres_by_filiere, get_by_matiere as get_filieres_by_matiere
 from crud.enseignement import get_by_professeur_and_matiere
 from crud.filiere import get_by_id as get_filiere_by_id
+import crud.decision_annuelle as decision_crud
+import crud.user as user_crud
 from models.enums import SessionNote
 from schemas.resultat_semestre import ResultatSemestreCreate, ResultatSemestreRead
 from schemas.decision_annuelle import DecisionAnnuelleRead
@@ -25,7 +27,9 @@ from exceptions.base import (
     FiliereRequiredError,
     PermissionDeniedError,
     DecisionAnnuelleAlreadyExistsError,
-    DecisionAnnuelleNotFoundError
+    DecisionAnnuelleNotFoundError,
+    NiveauRequiredError,
+    NiveauInvalideError,
 )
 
 # ---------- Constante pour le seuil de validation ----------
@@ -53,9 +57,39 @@ class BulletinService:
     def __init__(self, db: Session):
         self.db = db
 
+    # Table de correspondance niveau → semestres
+    _SEMESTRES_PAR_NIVEAU = {
+        "L1": ["S1", "S2"],
+        "L2": ["S3", "S4"],
+        "L3": ["S5", "S6"],
+    }
+
+    # Table de correspondance niveau → niveau suivant
+    _NIVEAU_SUIVANT = {
+        "L1": "L2",
+        "L2": "L3",
+        "L3": None,  # fin de cursus
+    }
+
+    def _semestres_de_lannee(self, etudiant_id: int) -> List[str]:
+        """
+        Détermine les deux semestres de l'année en cours pour un étudiant,
+        à partir de son niveau académique actuel (User.niveau_actuel).
+        """
+        etudiant = get_user_by_id(self.db, etudiant_id)
+        if not etudiant:
+            raise UserNotFoundError(etudiant_id)
+
+        if not etudiant.niveau_actuel:
+            raise NiveauRequiredError()
+
+        semestres = self._SEMESTRES_PAR_NIVEAU.get(etudiant.niveau_actuel)
+        if not semestres:
+            raise NiveauInvalideError(etudiant.niveau_actuel)
+
+        return semestres
 
     # FONCTIONS DE CALCUL
-
 
     def calculer_moyenne_matiere(self, etudiant_id: int, matiere_id: int) -> Dict[str, Any]:
         """
@@ -76,7 +110,6 @@ class BulletinService:
                 "statut": "NON NOTÉ"
             }
 
-        # 1. VÉRIFIER S'IL Y A UNE NOTE DE REPRISE (priorité maximale)
         note_reprise = None
         for note in notes:
             if note.session.value == SessionNote.REPRISE.value:
@@ -91,7 +124,6 @@ class BulletinService:
                 "statut": "VALIDÉ" if note_reprise.valeur >= SEUIL_VALIDATION else "NON VALIDE"
             }
 
-        # 2. VÉRIFIER S'IL Y A UNE NOTE DE RATTRAPAGE
         note_rattrapage = None
         for note in notes:
             if note.session.value == SessionNote.RATTRAPAGE.value:
@@ -106,7 +138,6 @@ class BulletinService:
                 "statut": "VALIDÉ" if note_rattrapage.valeur >= SEUIL_VALIDATION else "NON VALIDE"
             }
 
-        # 3. PAS DE RATTRAPAGE NI DE REPRISE → CALCUL NORMAL
         notes_par_type = {}
         for note in notes:
             type_note = note.type_note
@@ -237,11 +268,7 @@ class BulletinService:
             "credits_total": credits_total
         }
 
-
     # FONCTIONS DE GÉNÉRATION DE BULLETIN
-
-
-
 
     def sauvegarder_resultat_semestre(self, etudiant_id: int, semestre: str, annee_universitaire: str) -> Dict[str, Any]:
         """Sauvegarde le résultat d'un semestre dans la table resultats_semestre."""
@@ -321,10 +348,10 @@ class BulletinService:
         }
 
     def generer_pv_classe(
-        self,
-        semestre: str,
-        annee_universitaire: str,
-        filiere_id: Optional[int] = None
+            self,
+            semestre: str,
+            annee_universitaire: str,
+            filiere_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """Génère le procès-verbal d'une classe pour un semestre donné."""
         tous_etudiants = get_all_users(self.db)
@@ -366,11 +393,11 @@ class BulletinService:
         }
 
     def generer_pv_matiere(
-        self,
-        matiere_id: int,
-        semestre: str,
-        annee_universitaire: str,
-        current_user
+            self,
+            matiere_id: int,
+            semestre: str,
+            annee_universitaire: str,
+            current_user
     ) -> Dict[str, Any]:
         """Génère le procès-verbal d'une matière pour un professeur."""
         user_roles = [role.name for role in current_user.roles]
@@ -430,7 +457,7 @@ class BulletinService:
         }
 
     def generer_bulletin_etudiant(self, etudiant_id: int, semestre: str, annee_universitaire: str, current_user) -> \
-    Dict[str, Any]:
+            Dict[str, Any]:
         """Génère le bulletin complet d'un étudiant pour un semestre donné."""
         user_roles = [role.name for role in current_user.roles]
         if current_user.id != etudiant_id and not any(r in user_roles for r in ["professeur", "admin", "scolarite"]):
@@ -483,17 +510,13 @@ class BulletinService:
         resultats = get_by_etudiant(self.db, etudiant_id)
         return [ResultatSemestreRead.model_validate(r) for r in resultats]
 
-
-
-
-
     # ---------- Synchronisation avec ResultatMatiere ----------
     def synchroniser_resultat_matiere(
-        self,
-        etudiant_id: int,
-        matiere_id: int,
-        semestre: str,
-        annee_universitaire: str
+            self,
+            etudiant_id: int,
+            matiere_id: int,
+            semestre: str,
+            annee_universitaire: str
     ) -> None:
         """
         Recalcule la moyenne et le statut d'un étudiant pour une matière,
@@ -505,7 +528,6 @@ class BulletinService:
 
         resultat_calcul = self.calculer_moyenne_matiere(etudiant_id, matiere_id)
 
-        # Traduire le statut textuel du calcul en enum StatutValidation
         if resultat_calcul["statut"] == "VALIDÉ":
             statut = StatutValidation.VALIDE
         elif resultat_calcul["statut"] == "NON VALIDE":
@@ -513,7 +535,6 @@ class BulletinService:
         else:
             statut = StatutValidation.NON_NOTE
 
-        # Déterminer la session actuelle à partir des notes présentes
         if "Reprise" in resultat_calcul.get("notes", {}):
             session_actuelle = SessionNote.REPRISE
         elif "Rattrapage" in resultat_calcul.get("notes", {}):
@@ -542,14 +563,12 @@ class BulletinService:
                 **update_data
             })
 
-
-
     # ---------- Génération des dettes pour l'année suivante ----------
     def generer_dettes_annee_suivante(
-        self,
-        semestre: str,
-        annee_universitaire: str,
-        nouvelle_annee_universitaire: str
+            self,
+            semestre: str,
+            annee_universitaire: str,
+            nouvelle_annee_universitaire: str
     ) -> Dict[str, Any]:
         """
         Parcourt toutes les lignes ResultatMatiere en dette (NON_VALIDE ou
@@ -636,55 +655,12 @@ class BulletinService:
             "credits_total": credits_total
         }
 
-
-
-
-    def generer_decision_annuelle(self, etudiant_id: int, annee_universitaire: str) -> DecisionAnnuelleRead:
-        """
-        Calcule et enregistre la décision de passage pour un étudiant.
-        N'écrase jamais une décision existante : lève une erreur si déjà présente.
-        """
-        import crud.decision_annuelle as decision_crud
-
-        etudiant = get_user_by_id(self.db, etudiant_id)
-        if not etudiant:
-            raise UserNotFoundError(etudiant_id)
-
-        existing = decision_crud.get_by_etudiant_annee(self.db, etudiant_id, annee_universitaire)
-        if existing:
-            raise DecisionAnnuelleAlreadyExistsError()
-
-        credits_info = self.calculer_credits_valides_annee(etudiant_id, annee_universitaire)
-        credits_valides = credits_info["credits_valides"]
-
-        if credits_valides == 60:
-            decision = DecisionPassage.PASSE
-        elif credits_valides >= 42:
-            decision = DecisionPassage.ENJAMBEMENT
-        else:
-            decision = DecisionPassage.REDOUBLEMENT
-
-        nouvelle_decision = decision_crud.create(self.db, {
-            "etudiant_id": etudiant_id,
-            "annee_universitaire": annee_universitaire,
-            "credits_valides": credits_valides,
-            "credits_total": 60,
-            "decision": decision
-        })
-
-        return DecisionAnnuelleRead.model_validate(nouvelle_decision)
-
-
-
     def generer_decision_annuelle(self, etudiant_id: int, annee_universitaire: str) -> DecisionAnnuelleRead:
         """
         Calcule et enregistre la décision de passage pour un étudiant.
         Met à jour son niveau académique en conséquence.
         N'écrase jamais une décision existante : lève une erreur si déjà présente.
         """
-        import crud.decision_annuelle as decision_crud
-        import crud.user as user_crud
-
         etudiant = get_user_by_id(self.db, etudiant_id)
         if not etudiant:
             raise UserNotFoundError(etudiant_id)
@@ -711,7 +687,6 @@ class BulletinService:
             "decision": decision
         })
 
-        # Mise à jour du niveau académique si passage ou enjambement
         if decision in (DecisionPassage.PASSE, DecisionPassage.ENJAMBEMENT):
             niveau_suivant = self._NIVEAU_SUIVANT.get(etudiant.niveau_actuel)
             if niveau_suivant:
